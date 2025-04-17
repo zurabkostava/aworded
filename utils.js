@@ -70,6 +70,5 @@ document.getElementById('hideMasteredCheckbox').addEventListener('change', (e) =
 });
 
 
-document.getElementById("testUploadBtn").addEventListener("click", syncTestCardToFirebase);
 
 

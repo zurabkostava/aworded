@@ -53,13 +53,6 @@
     </script>
 
 
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('firebase-messaging-sw.js')
-                .then(() => console.log("✅ Service Worker რეგისტრირებულია"))
-                .catch(err => console.error("❌ SW error:", err));
-        }
-    </script>
 
     <!-- შენიშნე, რომ ორი ახალი ფუნქცია დაგვჭირდება:
             getDocs, doc, setDoc, deleteDoc -->
@@ -99,7 +92,7 @@
 
 
         getToken(messaging, {
-            vapidKey: 'BNq3-Trxsd5PnOmcQY1AmUeuU-cKdYy75uHWSycU-jH1dvuq854pWRWEG_Um7xIDnQ7VtaO0FXoP8Gb8CbEyves'
+            vapidKey: 'BI6DQvpq3o0ECfmd_GpKtOihM60QvSBKJGfsu_iOtgNFUoQc_xYvo_AgAFxdRo3HFWk2OK4DjB-x0-uOVQUxpG0'
         })
             .then((currentToken) => {
                 if (currentToken) {

@@ -748,7 +748,7 @@ async function getFCMToken() {
     try {
         const messaging = firebase.messaging();
         const token = await messaging.getToken({
-            vapidKey: "BNq3-Trxsd5PnOmcQY1AmUeuU-cKdYy75uHWSycU-jH1dvuq854pWRWEG_Um7xIDnQ7VtaO0FXoP8Gb8CbEyves" // ❗ ჩაანაცვლე შენი VAPID public key-ით
+            vapidKey: "BI6DQvpq3o0ECfmd_GpKtOihM60QvSBKJGfsu_iOtgNFUoQc_xYvo_AgAFxdRo3HFWk2OK4DjB-x0-uOVQUxpG0" // ❗ ჩაანაცვლე შენი VAPID public key-ით
         });
         return token;
     } catch (err) {
