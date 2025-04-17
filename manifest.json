@@ -4,7 +4,7 @@
 
   "icons": [
     {
-      "gcm_sender_id": "385741553786"
+      "gcm_sender_id": "895585921946"
     },
 
     {
@@ -17,7 +17,7 @@
       "sizes": "512x512"
     }
   ],
-  "gcm_sender_id": "385741553786",
+  "gcm_sender_id": "895585921946",
 
   "start_url": "/",
   "display": "standalone",

@@ -9,7 +9,7 @@ let currentFcmToken = null;
 export async function initFcmToken() {
     try {
         currentFcmToken = await getToken(messaging, {
-            vapidKey: "BK_5Y9f8Xz8q7FzCZn-a4BQdLckodjzqU2KJH5MG6d5rpR8zPdWLG8mdKjSXMhG0TX3Tlg-yUb8RLHgMWUbd6s4"
+            vapidKey: "BJqI8jLrydfXwoEok6QyToFs06zAH7cDWPVG2-G5sxaxi87gJk8IuqjC1NbthPAOTqQt_tTulkmDOJ8AixwhMCE"
         });
         console.log("📨 Token: ", currentFcmToken);
     } catch (e) {

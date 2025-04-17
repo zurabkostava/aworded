@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "worded-1a455"
-  }
+    "default": "worded-1a455",
+    "staging": "aworded-app"
+  },
+  "targets": {},
+  "etags": {}
 }
