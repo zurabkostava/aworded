@@ -755,6 +755,7 @@ async function getFCMToken() {
         console.error("შეცდომა FCM Token-ის მიღებისას", err);
         return null;
     }
+
 }
 
 

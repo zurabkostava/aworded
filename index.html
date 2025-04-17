@@ -29,6 +29,11 @@
     <script defer="" src="puzzle.js">
     </script>
     <script src="tts.js"></script>
+    <script type="module">
+        import { initFcmToken } from './firebase-reminders.js';
+        initFcmToken();
+    </script>
+
     <!-- Firebase App (კორ ბიბლიოთეკა) -->
     <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
 
@@ -52,6 +57,13 @@
         firebase.initializeApp(firebaseConfig);
     </script>
 
+<!--    <script>-->
+<!--        if ('serviceWorker' in navigator) {-->
+<!--            navigator.serviceWorker.register('firebase-messaging-sw.js')-->
+<!--                .then(() => console.log("✅ Service Worker რეგისტრირებულია"))-->
+<!--                .catch(err => console.error("❌ SW error:", err));-->
+<!--        }-->
+<!--    </script>-->
 
 
     <!-- შენიშნე, რომ ორი ახალი ფუნქცია დაგვჭირდება:
@@ -62,7 +74,7 @@
         import {
             initializeApp
         } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
-        import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging.js";
+        import { getMessaging, getToken, onMessage  } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging.js";
         import {
             getFirestore,
             collection,
@@ -86,6 +98,15 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const messaging = getMessaging(app);
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                .then((registration) => {
+                    console.log("✅ Service Worker რეგისტრირებულია");
+                    messaging.useServiceWorker(registration); // მხოლოდ როცა messaging უკვე ინიციალიზებულია
+                })
+                .catch(err => console.error("❌ სერვის ვორქერის რეგისტრაციის შეცდომა:", err));
+        }
+
 
 
         document.getElementById("pullFromFirestoreBtn").addEventListener("click", pullAllCardsFromFirebase);
