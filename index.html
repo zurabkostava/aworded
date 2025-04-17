@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>
+        English Learning Cards
+    </title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffffff">
+
+    <link href="style.css" rel="stylesheet"/>
+    <script defer="" src="script.js">
+    </script>
+    <script defer="" src="quiz.js">
+    </script>
+    <script defer="" src="wordhear.js">
+    </script>
+    <script defer="" src="makeword.js">
+    </script>
+    <script defer="" src="utils.js">
+    </script>
+    <script defer="" src="mix.js">
+    </script>
+    <script defer="" src="typegame.js">
+    </script>
+    <script defer="" src="sentence.js">
+    </script>
+    <script defer="" src="puzzle.js">
+    </script>
+    <script src="tts.js"></script>
+    <!-- Firebase App (კორ ბიბლიოთეკა) -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+
+    <!-- Firebase Cloud Messaging -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging-compat.js"></script>
+
+    <!-- Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore-compat.js"></script>
+
+    <!-- Firebase Initialization -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyArftPeH-SoIwmm2aKLDHBTE8M4DQ5jLM8",
+            authDomain: "worded-1a455.firebaseapp.com",
+            projectId: "worded-1a455",
+            storageBucket: "worded-1a455.appspot.com",
+            messagingSenderId: "385741553786",
+            appId: "1:385741553786:web:c9e1d0d5bb662950f9fbc3"
+        };
+        firebase.initializeApp(firebaseConfig);
+    </script>
+
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('firebase-messaging-sw.js')
+                .then(() => console.log("✅ Service Worker რეგისტრირებულია"))
+                .catch(err => console.error("❌ SW error:", err));
+        }
+    </script>
+
+    <!-- შენიშნე, რომ ორი ახალი ფუნქცია დაგვჭირდება:
+            getDocs, doc, setDoc, deleteDoc -->
+    <script type="module">
+
+
+        import {
+            initializeApp
+        } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+        import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging.js";
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            getDocs,
+            doc,
+            setDoc,
+            deleteDoc
+        } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyArftPeH-SoIwmm2aKLDHBTE8M4DQ5jLM8",
+            authDomain: "worded-1a455.firebaseapp.com",
+            projectId: "worded-1a455",
+            storageBucket: "worded-1a455.appspot.com",
+            messagingSenderId: "385741553786",
+            appId: "1:385741553786:web:c9e1d0d5bb662950f9fbc3",
+            measurementId: "G-9QPQ3JE2MZ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const messaging = getMessaging(app);
+
+
+        document.getElementById("pullFromFirestoreBtn").addEventListener("click", pullAllCardsFromFirebase);
+
+
+        getToken(messaging, {
+            vapidKey: 'BNq3-Trxsd5PnOmcQY1AmUeuU-cKdYy75uHWSycU-jH1dvuq854pWRWEG_Um7xIDnQ7VtaO0FXoP8Gb8CbEyves'
+        })
+            .then((currentToken) => {
+                if (currentToken) {
+                    console.log("✅ Token:", currentToken);
+                } else {
+                    console.warn('❌ Token-ის მიღება ვერ მოხერხდა.');
+                }
+            }).catch((err) => {
+            console.error('❌ FCM token შეცდომა:', err);
+        });
+        async function pullAllCardsFromFirebase() {
+            try {
+                const snapshot = await getDocs(collection(db, "cards"));
+                const fetchedCards = [];
+
+                // ლოკალური მონაცემების წამოღება
+                const stored = localStorage.getItem("english_cards_app");
+                const localData = stored ? JSON.parse(stored) : { cards: [] };
+
+                const localWordsMap = {};
+                localData.cards.forEach(card => {
+                    localWordsMap[card.word.trim().toLowerCase()] = card;
+                });
+
+                snapshot.forEach(docSnap => {
+                    const cardData = docSnap.data();
+                    const wordKey = cardData.word.trim().toLowerCase();
+                    cardData.firebaseId = docSnap.id;
+
+                    if (localWordsMap[wordKey]) {
+                        // უკვე არსებობს → განახლება
+                        (cardData.tags || []).forEach(tag => allTags.add(tag));
+
+                        Object.assign(localWordsMap[wordKey], {
+                            ...cardData,
+                            firebaseId: docSnap.id,
+
+                        });
+                    } else {
+                        (cardData.tags || []).forEach(tag => allTags.add(tag));
+
+                        // ახალი სიტყვა
+                        fetchedCards.push(cardData);
+                    }
+                    renderSidebarTags();
+                    populateGlobalTags();
+                });
+
+                const combinedCards = [...localData.cards, ...fetchedCards];
+
+                // შევინახოთ
+                localStorage.setItem("english_cards_app", JSON.stringify({ cards: combinedCards }));
+
+                // UI განახლება
+                if (window.loadCardsFromStorage) {
+                    document.getElementById('cardContainer').innerHTML = '';
+                    window.loadCardsFromStorage();
+
+                    // ყველა ვიზუალი განახლდეს (progress bar და mastered)
+                    document.querySelectorAll('.card').forEach(updateCardVisuals);
+
+                }
+
+
+            } catch (err) {
+                console.error("❌ Firestore Load შეცდომა:", err);
+                showToast("ვერ მოხერხდა ჩამოტვირთვა Firestore-დან!");
+            }
+        }
+
+
+
+
+        document.getElementById("syncAllBtn").addEventListener("click", async () => {
+            const syncBtn = document.getElementById("syncAllBtn");
+            const originalText = syncBtn.innerHTML;
+
+            try {
+                // Show loading state
+                syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publishing...';
+                syncBtn.disabled = true;
+
+                // First perform the publish operation
+                await syncAllCardsToFirebase();
+
+                // If successful, show success message
+                syncBtn.innerHTML = '<i class="fas fa-check"></i> Published!';
+
+                // Wait a moment, then trigger the sync operation
+                setTimeout(async () => {
+                    try {
+                        syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+
+                        // Perform the sync operation
+                        await pullAllCardsFromFirebase();
+
+                        // Show final success state
+                        syncBtn.innerHTML = '<i class="fas fa-check-double"></i> Done!';
+                        setTimeout(() => {
+                            syncBtn.innerHTML = originalText;
+                            syncBtn.disabled = false;
+                        }, 2000);
+                    } catch (syncError) {
+                        syncBtn.innerHTML = '<i class="fas fa-times"></i> Sync Failed';
+                        setTimeout(() => {
+                            syncBtn.innerHTML = originalText;
+                            syncBtn.disabled = false;
+                        }, 2000);
+                        console.error("Sync error:", syncError);
+                    }
+                }, 1000);
+            } catch (publishError) {
+                syncBtn.innerHTML = '<i class="fas fa-times"></i> Publish Failed';
+                setTimeout(() => {
+                    syncBtn.innerHTML = originalText;
+                    syncBtn.disabled = false;
+                }, 2000);
+                console.error("Publish error:", publishError);
+            }
+        });
+
+        function refreshLocalDataFromDOM() {
+            const stored = localStorage.getItem("english_cards_app");
+            if (!stored) return;
+            const data = JSON.parse(stored);
+            const domCards = document.querySelectorAll('.card');
+            const domMap = {};
+
+            domCards.forEach(card => {
+                const word = card.querySelector('.word')?.textContent.trim().toLowerCase();
+                if (!word) return;
+
+                const progress = parseFloat(card.dataset.progress || 0);
+                const updated = parseInt(card.dataset.updated || Date.now());
+                domMap[word] = { progress, updated };
+            });
+
+            data.cards.forEach(card => {
+                const key = card.word.trim().toLowerCase();
+                if (domMap[key]) {
+                    card.progress = domMap[key].progress;
+                    card.updated = domMap[key].updated;
+                }
+            });
+
+            localStorage.setItem("english_cards_app", JSON.stringify(data));
+        }
+
+
+
+
+        async function syncAllCardsToFirebase() {
+            try {
+                const stored = localStorage.getItem("english_cards_app");
+                if (!stored) throw new Error("ლოკალურ შენახვაში მონაცემები ვერ მოიძებნა");
+
+                const data = JSON.parse(stored);
+                const domCards = document.querySelectorAll('.card');
+                const domMap = {};
+                domCards.forEach(card => {
+                    const word = card.querySelector('.word')?.textContent.trim().toLowerCase();
+                    const progress = parseFloat(card.dataset.progress || 0);
+                    const updated = parseInt(card.dataset.updated || Date.now());
+                    if (word) {
+                        domMap[word] = { progress, updated };
+                    }
+                });
+
+                // ავსახოთ DOM-ის ცვლილებები localStorage-ზე
+                data.cards.forEach(card => {
+                    const wordKey = card.word.trim().toLowerCase();
+                    if (domMap[wordKey]) {
+                        card.progress = domMap[wordKey].progress;
+                        card.updated = domMap[wordKey].updated;
+                    }
+                });
+
+                // უკვე არსებული firebase ბარათების ჩამოტვირთვა
+                const snapshot = await getDocs(collection(db, "cards"));
+                const serverMap = {};
+                snapshot.forEach(docSnap => {
+                    const cardData = docSnap.data();
+                    const wordKey = cardData.word.trim().toLowerCase();
+                    serverMap[wordKey] = { ...cardData, id: docSnap.id };
+                });
+
+                const uploadedIds = new Set();
+
+                for (const card of data.cards) {
+                    const wordKey = card.word.trim().toLowerCase();
+
+                    // 🎯 ამოიღე progress პირდაპირ DOM-დან, თუ არსებობს
+                    const domCard = [...document.querySelectorAll('.card')].find(c =>
+                        c.querySelector('.word').textContent.trim().toLowerCase() === wordKey
+                    );
+
+                    if (domCard) {
+                        const newProgress = parseFloat(domCard.dataset.progress || 0);
+                        card.progress = isNaN(newProgress) ? 0 : parseFloat(newProgress.toFixed(1));
+                        card.updated = parseInt(domCard.dataset.updated || Date.now());
+                    }
+
+                    const docData = {
+                        word: card.word,
+                        mainTranslations: card.mainTranslations || [],
+                        extraTranslations: card.extraTranslations || [],
+                        tags: card.tags || [],
+                        englishSentences: card.englishSentences || [],
+                        georgianSentences: card.georgianSentences || [],
+                        progress: card.progress,
+                        updated: card.updated
+                    };
+
+                    if (serverMap[wordKey]) {
+                        const existing = serverMap[wordKey];
+                        if (hasCardChanged(docData, existing)) {
+                            await setDoc(doc(db, "cards", existing.id), docData, { merge: true });
+                        }
+                        card.firebaseId = existing.id;
+                        uploadedIds.add(existing.id);
+                    } else {
+                        const docRef = await addDoc(collection(db, "cards"), docData);
+                        card.firebaseId = docRef.id;
+                        uploadedIds.add(docRef.id);
+                    }
+                }
+
+
+                // წაშლა მხოლოდ იმ ჩანაწერების, რომლებიც აღარ არსებობს ლოკალურად
+                const firebaseIdsToKeep = new Set(data.cards.map(c => c.firebaseId));
+                for (const [key, serverCard] of Object.entries(serverMap)) {
+                    if (!firebaseIdsToKeep.has(serverCard.id)) {
+                        await deleteDoc(doc(db, "cards", serverCard.id));
+                    }
+                }
+
+                // განახლებული firebaseId-ების შენახვა
+                localStorage.setItem("english_cards_app", JSON.stringify(data));
+                return true;
+
+            } catch (err) {
+                console.error("❌ Publish სინქრონის შეცდომა:", err);
+                throw err;
+            }
+        }
+        function hasCardChanged(localCard, serverCard) {
+            const fieldsToCheck = [
+                'word',
+                'mainTranslations',
+                'extraTranslations',
+                'tags',
+                'englishSentences',
+                'georgianSentences',
+                'progress'
+            ];
+
+            for (const field of fieldsToCheck) {
+                const localVal = JSON.stringify(localCard[field] || []);
+                const serverVal = JSON.stringify(serverCard[field] || []);
+                if (localVal !== serverVal) return true;
+            }
+
+            return false;
+        }
+
+    </script>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+    <!-- Tagify CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify.css" rel="stylesheet"/>
+    <!-- Font Awesome (latest version) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@yaireo/tagify">
+    </script>
+</head>
+<body>
+<div class="top">
+    <div class="top-bar">
+        <div class="top-left">
+            <object id="appLogo" data="/icons/logo.svg" type="image/svg+xml"></object>
+        </div>
+        <div class="top-center">
+
+            <!-- Training Button -->
+
+            <div class="input-container search-input">
+                <label class="material-input">
+                    <input class="form-control" id="searchInput" placeholder=" " type="text"/>
+                    <span>
+        ძიება
+       </span>
+                    <i class="fas fa-search" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #aaa;">
+                    </i>
+                </label>
+            </div>
+            <button id="trainingBtn">
+                <i class="fa-solid fa-award"></i>
+                 ტრენინგი
+            </button>
+
+        </div>
+        <div class="top-right">
+
+
+            <button class="toolbar-btn" id="syncAllBtn">Publish</button>
+            <button id="toggleDarkModeBtn" title="Dark Mode Toggle">
+                <i class="fas fa-moon">
+                </i>
+            </button>
+            <button id="settingsBtn">
+                <i class="fas fa-cog">
+                </i>
+            </button>
+        </div>
+    </div>
+    <!-- toolbar ბლოკი -->
+    <div class="card-toolbar" id="cardToolbar">
+        <div class="toolbar-left">
+            <button id="toggleSidebarBtn">
+                <i class="fas fa-tags">
+                </i> თეგები
+            </button>
+
+
+        </div>
+        <div class="toolbar-center">
+            <div class="sorting">
+                <i class="fas fa-sort-down" id="sortDirectionIcon">
+                </i>
+                <label class="sort-label" for="sortSelect">
+                </label>
+                <select class="toolbar-select" id="sortSelect">
+                    <option value="alphabetical">
+                        ანბანური
+                    </option>
+                    <option value="updated">
+                        ბოლო
+                    </option>
+                    <option selected="" value="progress">
+                        პროგრესით
+                    </option>
+                </select>
+            </div>
+            <div class="hide-mastered-wrapper">
+                <label style="display: flex; align-items: center; gap: 5px;">
+                    <input id="hideMasteredCheckbox" type="checkbox"/>
+                    <span>
+        - ნასწავლი
+       </span>
+                </label>
+            </div>
+        </div>
+        <div class="toolbar-right">
+            <button id="notificationsBtn" class="toolbar-btn"><i class="fa-regular fa-bell"></i></button>
+
+
+            <button class="toolbar-btn" id="statsBtn" title="სტატისტიკა">
+                <i class="fas fa-chart-pie">
+                </i>
+                სტატისტიკა
+            </button>
+        </div>
+    </div>
+</div>
+<div class="card-container" id="cardContainer">
+    <!-- დინამიური ქარდები ჩნდება აქ -->
+</div>
+<!-- მოდალი -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <div class="modal-actions close-modal">
+            <button class="close-button" id="closeAddModalBtn">
+                ×
+            </button>
+        </div>
+        <h2>
+            ახალი სიტყვა
+        </h2>
+        <div class="input-container">
+            <label class="material-input validation">
+                <input class="form-control" id="wordInput" placeholder=" " required="" type="text" value="(ვალიდაცია)"/>
+                <span>
+       საწყისი სიტყვა
+      </span>
+            </label>
+        </div>
+        <div class="input-container tag-input">
+            <label class="material-input">
+                <input id="mainTranslationInput" placeholder=" " type="text"/>
+                <span>
+       მთავარი თარგმანი
+      </span>
+            </label>
+            <button id="addMainTranslationBtn">
+                +
+            </button>
+        </div>
+        <div class="tags-display" id="mainTranslationTags">
+        </div>
+        <div class="input-container tag-input">
+            <label class="material-input">
+                <input id="extraTranslationInput" placeholder=" " type="text"/>
+                <span>
+       დამატებითები თარგმანი
+      </span>
+            </label>
+            <button id="addExtraTranslationBtn">
+                +
+            </button>
+        </div>
+        <div class="tags-display" id="extraTranslationTags">
+        </div>
+        <div class="input-container tag-input">
+            <label class="material-input">
+                <input id="tagInput" placeholder=" " type="text"/>
+                <span>
+       ჩაწერე ან აარჩიე თეგი
+      </span>
+            </label>
+            <button id="addTagBtn">
+                +
+            </button>
+            <div class="dropdown" id="tagDropdown">
+            </div>
+        </div>
+        <div class="tags-display" id="tagList">
+        </div>
+        <div class="input-container">
+            <label class="material-input">
+                <textarea class="form-control" id="englishSentences" placeholder=" " rows="6"></textarea>
+                <span>
+       ინგლისური წინადაებები
+      </span>
+            </label>
+        </div>
+        <div class="input-container">
+            <label class="material-input">
+                <textarea class="form-control" id="georgianSentences" placeholder=" " rows="5"></textarea>
+                <span>
+       ქართული წინადაებები
+      </span>
+            </label>
+        </div>
+        <div class="modal-actions">
+            <button id="saveCardBtn">
+                შენახვა
+            </button>
+            <button id="cancelBtn">
+                გაუქმება
+            </button>
+        </div>
+    </div>
+</div>
+
+<button class="mobile-sidebar-btn" id="mobileSidebarBtn">
+    <i class="fas fa-filter">
+    </i>
+</button>
+<div class="sidebar" id="sidebar">
+    <div class="tags-header">
+        <button id="closeSidebarBtn" style="float:right;">
+            ✖
+        </button>
+        <h3>
+            თეგები
+        </h3>
+        <button class="clear-tags-btn" id="clearTagFiltersBtn">
+            ✖ ფილტრის გასუფთავება
+        </button>
+    </div>
+    <ul id="sidebarTagList">
+    </ul>
+</div>
+<div class="modal-overlay" id="cardPreviewModal" style="display: none;">
+    <!-- გადატანილი ღილაკები მოდალის შიგნით -->
+    <button class="nav-btn inside-nav left-nav fas fa-angle-left" id="prevCardBtn">
+    </button>
+    <button class="nav-btn inside-nav right-nav fas fa-angle-right" id="nextCardBtn">
+    </button>
+    <div class="modal preview-modal">
+        <div class="modal-actions close-modal">
+            <button class="close-button" id="closePreviewBtn">
+                ×
+            </button>
+        </div>
+        <div class="preview-sticky">
+            <h2 id="previewWord">
+            </h2>
+            <hr/>
+            <p id="previewTranslation">
+            </p>
+            <div class="tags" id="previewTags">
+            </div>
+        </div>
+        <div class="modal-section sentence-preview">
+            <h3>
+                ინგლისური
+            </h3>
+            <div class="sentence-list" id="previewEnglishSentences">
+            </div>
+            <h3>
+                ქართული
+            </h3>
+            <div class="sentence-list" id="previewGeorgianSentences">
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal-overlay" id="settingsModal" style="display: none; gap: 10px; flex-wrap: wrap;">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-actions close-modal">
+            <button class="close-button" id="closeSettingsBtn">
+                ×
+            </button>
+        </div>
+        <h2>
+            პარამეტრები
+        </h2>
+        <!-- 🔈 Voice არჩევა -->
+        <div class="input-container">
+            <label class="material-input material-select">
+                <select id="voiceSelect" required="">
+                    <option disabled="" hidden="" selected="" value="">
+                    </option>
+                    <option value="Libby">
+                        Microsoft Libby Online
+                    </option>
+                    <option value="Maisie">
+                        Microsoft Maisie Online
+                    </option>
+                    <option value="Ryan">
+                        Microsoft Ryan Online
+                    </option>
+                    <option value="Sonia">
+                        Microsoft Sonia Online
+                    </option>
+                    <option value="Thomas">
+                        Microsoft Thomas Online
+                    </option>
+                    <option value="Ana">
+                        Microsoft Ana Online
+                    </option>
+                </select>
+                <span>
+       აირჩიე ინგლისური ხმა
+      </span>
+                <i class="fas fa-chevron-down select-arrow-icon">
+                </i>
+            </label>
+        </div>
+        <!-- ინგლისურის სიჩქარის კონტროლი -->
+        <div>
+            <label class="material-input">
+      <span>
+       ინგლისური ხმის სიჩქარე
+      </span>
+                <input id="englishRateSlider" max="2" min="0.5" step="0.1" type="range" value="1"/>
+            </label>
+        </div>
+        <!-- 🔈 Georgian Voice არჩევა -->
+        <div class="input-container">
+            <label class="material-input material-select">
+                <select id="georgianVoiceSelect" required="">
+                    <option disabled="" hidden="" selected="" value="">
+                    </option>
+                    <option value="Microsoft Eka Online (Natural)">
+                        Microsoft Eka Online (Natural) - Georgian (Georgia)
+                    </option>
+                    <option value="Microsoft Giorgi Online (Natural)">
+                        Microsoft Giorgi Online (Natural) - Georgian (Georgia)
+                    </option>
+                </select>
+                <span>
+       აირჩიე ქართული ხმა
+      </span>
+                <i class="fas fa-chevron-down select-arrow-icon">
+                </i>
+            </label>
+        </div>
+        <!-- ქართული ხმის სიჩქარის კონტროლი -->
+        <div>
+            <label class="material-input">
+      <span>
+       ქართული ხმის სიჩქარე
+      </span>
+                <input id="georgianRateSlider" max="2" min="0.5" step="0.1" type="range" value="1"/>
+            </label>
+        </div>
+        <div class="import-export-group">
+            <h3>
+                ფაილების იმპორტი / ექსპორტი
+            </h3>
+            <div class="button-row">
+                <button class="settings-btn blue" id="exportExcelBtn">
+                    📤 ექსპორტი Excel-ში
+                </button>
+                <label class="settings-btn settings-btn-force cyan" for="importExcelInput">
+                    📥 იმპორტი Excel-დან
+                </label>
+                <input accept=".xlsx" id="importExcelInput" style="display: none;" type="file">
+                <button class="settings-btn gray" id="downloadTemplateBtn">
+                    🧾 ჩამოტვირთე შაბლონი
+                </button>
+                <button class="toolbar-btn" id="pullFromFirestoreBtn">ბაზიდან ჩამოტვირთვა</button>
+
+
+
+
+            </div>
+        </div>
+        <div class="modal-actions" style="margin-top: 20px;">
+            <button id="saveVoiceBtn" style="background-color: #28a745; color: white;">
+                შენახვა
+            </button>
+        </div>
+    </div>
+</div>
+<!-- Training Modal -->
+<div class="training-modal hidden" id="trainingModal">
+    <div class="training-modal-content">
+        <div class="training-wrapper">
+            <div class="training-tabs">
+                <button class="training-tab active" data-tab="quiz">
+                    QUIZ
+                </button>
+                <button class="training-tab" data-tab="tab2">
+                    HEAR
+                </button>
+                <button class="training-tab" data-tab="tab3">
+                    MIX
+                </button>
+                <button class="training-tab" data-tab="tab4">
+                    FILL
+                </button>
+                <button class="training-tab" data-tab="tab5">
+                    TYPE
+                </button>
+                <button class="training-tab" data-tab="tab6">
+                    SENTENCE
+                </button>
+                <button class="training-tab" data-tab="tab7">
+                    PUZZLE
+                </button>
+                <button class="training-close">
+                    ×
+                </button>
+            </div>
+            <div id="globalTrainingSettings">
+                <div class="tag-filter">
+                    <label for="globalTagSelect">
+                        თეგი:
+                    </label>
+                    <select id="globalTagSelect">
+                    </select>
+                </div>
+                <div class="count-filter">
+                    <label for="globalQuestionCount">
+                        რაოდენობა:
+                    </label>
+                    <input id="globalQuestionCount" max="100" min="1" type="number" value="10"/>
+                </div>
+                <label>
+                    <input id="globalReverseToggle" type="checkbox"/>
+                    რევერსი
+                </label>
+                <label>
+                    <input id="globalHideMastered" type="checkbox"/>
+                    - ნასწავლი
+                </label>
+            </div>
+        </div>
+        <div class="training-tab-content" data-tab-content="quiz" id="quizTab">
+            <h2>
+                Quiz სექცია
+            </h2>
+            <div class="quiz-settings">
+            </div>
+            <div class="quiz-container" id="quizContainer">
+                <!-- აქ ჩნდება ტესტის ინტერფეისი -->
+            </div>
+        </div>
+        <div class="training-tab-content hidden" data-tab-content="tab2">
+            <h2>
+                ტაბი 2 შინაარსი
+            </h2>
+        </div>
+        <div class="training-tab-content hidden" data-tab-content="tab3">
+            <h2>
+                ტაბი 3 შინაარსი
+            </h2>
+        </div>
+        <div class="training-tab-content hidden" data-tab-content="tab4">
+            <h2>
+                ტაბი 4 შინაარსი
+            </h2>
+        </div>
+        <div class="training-tab-content hidden" data-tab-content="tab5">
+            <h2>
+                ტაბი 5 შინაარსი
+            </h2>
+        </div>
+        <div class="training-tab-content hidden" data-tab-content="tab6">
+        </div>
+        <div class="training-tab-content hidden" data-tab-content="tab7">
+        </div>
+    </div>
+</div>
+<div class="fixed-player-wrapper">
+    <div class="player">
+        <button class="toolbar-btn" title="Previous">
+            <i class="fas fa-backward-step">
+            </i>
+        </button>
+        <button class="toolbar-btn" title="Play">
+            <i class="fas fa-play">
+            </i>
+        </button>
+        <button class="toolbar-btn" title="Stop">
+            <i class="fas fa-stop">
+            </i>
+        </button>
+        <button class="toolbar-btn" title="Next">
+            <i class="fas fa-forward-step">
+            </i>
+        </button>
+        <button class="toolbar-btn" id="shuffleCardBtn" title="Shuffle">
+            <i class="fas fa-shuffle">
+            </i>
+        </button>
+    </div>
+</div>
+<button class="mobile-toggle-btn" id="showTopBtn">
+    <i class="fas fa-sliders">
+    </i>
+</button>
+<button class="add-card-btn" id="addCardBtn">
+    <i class="fas fa-plus">
+    </i>
+</button>
+<div class="toolbar-actions">
+    <button id="deleteSelectedBtn">
+        <i class="fas fa-trash">
+        </i>
+        წაშლა
+    </button>
+    <button id="selectAllBtn">
+        <i class="fa-solid fa-check-double">
+        </i>
+    </button>
+    <button id="cancelSelectionBtn">
+        <i class="fas fa-xmark">
+        </i>
+    </button>
+</div>
+<!-- სტატისტიკის მოდალი -->
+<div class="modal-overlay" id="statsModal" style="display:none;">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-actions close-modal">
+            <button class="close-button" id="closeStatsBtn">
+                ×
+            </button>
+        </div>
+        <h2>
+            სტატისტიკა
+        </h2>
+        <div id="statsContent">
+            <!-- აქ შეავსებს JS-ი ჯამურ მონაცემებს -->
+            <p>
+                სიტყვების საერთო რაოდენობა:
+                <span id="statsTotalWords">
+       0
+      </span>
+            </p>
+            <p>
+                ნასწავლი სიტყვები:
+                <span id="statsMastered">
+       0
+      </span>
+                <span id="statsTotal2">
+       0
+      </span>
+            </p>
+            <p>
+                საშუალო პროგრესი:
+                <span id="statsAvgProgress">
+       0
+      </span>
+            </p>
+            <p>
+                გავლილი ტესტირება (სულ):
+                <span id="statsTests">
+       0
+      </span>
+            </p>
+            <p>
+                სწორი vs არასწორი:
+                <span id="statsCorrectWrong">
+       0 - 0 (0% - 0%)
+      </span>
+            </p>
+            <button id="resetStatsBtn" style="margin-top: 20px; background-color: crimson; color: white; padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer;">
+                <i class="fa-solid fa-broom">
+                </i>
+                გასუფთავება
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal-overlay" id="notificationsModal" style="display:none;">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-actions close-modal">
+            <button class="close-button" id="closeNotificationsBtn">×</button>
+        </div>
+        <h2>შეტყობინებები</h2>
+
+        <div class="input-container">
+            <label class="material-input">
+                <input type="time" id="reminderTimeInput" required>
+                <span>შეიყვანე დრო</span>
+            </label>
+        </div>
+
+        <div class="weekday-checkboxes" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+            <label><input type="checkbox" value="1"> ორშ.</label>
+            <label><input type="checkbox" value="2"> სამშ.</label>
+            <label><input type="checkbox" value="3"> ოთხშ.</label>
+            <label><input type="checkbox" value="4"> ხუთშ.</label>
+            <label><input type="checkbox" value="5"> პარ.</label>
+            <label><input type="checkbox" value="6"> შაბ.</label>
+            <label><input type="checkbox" value="0"> კვ.</label>
+
+        </div>
+
+
+        <div class="input-container">
+            <label class="material-input material-select">
+                <select id="notificationTagFilter">
+                    <option value="">ყველა თეგი</option>
+                    <!-- დინამიურად დაემატება -->
+                </select>
+                <span>აირჩიე თეგი</span>
+                <i class="fas fa-chevron-down select-arrow-icon"></i>
+            </label>
+        </div>
+
+        <label style="display: flex; align-items: center; justify-content: center; width: 40%; height: 30px; margin: 0 auto; cursor: pointer">
+
+
+            <input style="width: auto; margin-right: 10px" type="checkbox" id="excludeMasteredCheckbox" />
+            - ნასწავლი
+        </label>
+
+        <button id="addReminderBtn" style="margin-bottom: 15px;">➕ დამატება</button>
+
+        <ul id="reminderList"></ul>
+
+
+
+    </div>
+</div>
+
+<h2 class="mobile-tittle">AWorded</h2>
+<div class="toast-container" id="toastContainer"></div>
+</body>
+</html>
