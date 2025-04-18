@@ -1,3 +1,4 @@
+//firebase-reminders.js
 import { getFirestore, collection, addDoc, doc, setDoc, getDocs, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging.js";
 

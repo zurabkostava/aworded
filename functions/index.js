@@ -1,3 +1,4 @@
+//index.js
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
