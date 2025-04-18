@@ -63,6 +63,8 @@
                 .then(() => console.log("✅ Service Worker რეგისტრირებულია"))
                 .catch(err => console.error("❌ SW error:", err));
         }
+        navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
+
     </script>
 
 
