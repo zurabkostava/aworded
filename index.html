@@ -56,14 +56,15 @@
         };
         firebase.initializeApp(firebaseConfig);
     </script>
+    <script type="module" src="firebase-messaging-sw.js"></script>
 
-<!--    <script>-->
-<!--        if ('serviceWorker' in navigator) {-->
-<!--            navigator.serviceWorker.register('firebase-messaging-sw.js')-->
-<!--                .then(() => console.log("✅ Service Worker რეგისტრირებულია"))-->
-<!--                .catch(err => console.error("❌ SW error:", err));-->
-<!--        }-->
-<!--    </script>-->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('firebase-messaging-sw.js')
+                .then(() => console.log("✅ Service Worker რეგისტრირებულია"))
+                .catch(err => console.error("❌ SW error:", err));
+        }
+    </script>
 
 
     <!-- შენიშნე, რომ ორი ახალი ფუნქცია დაგვჭირდება:
@@ -98,14 +99,6 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const messaging = getMessaging(app);
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/firebase-messaging-sw.js')
-                .then((registration) => {
-                    console.log("✅ Service Worker რეგისტრირებულია");
-                    messaging.useServiceWorker(registration); // მხოლოდ როცა messaging უკვე ინიციალიზებულია
-                })
-                .catch(err => console.error("❌ სერვის ვორქერის რეგისტრაციის შეცდომა:", err));
-        }
 
 
 
