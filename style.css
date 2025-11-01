@@ -2565,3 +2565,91 @@ textarea {
 }
 
 
+.auth-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background-color: #f5f5f5;
+    z-index: 100000;
+}
+
+body.dark .auth-container {
+    background-color: #121212;
+}
+
+.auth-box {
+    width: 100%;
+    max-width: 400px;
+    padding: 30px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+body.dark .auth-box {
+    background: #1e1e1e;
+}
+
+.auth-box h2 {
+    margin-top: 0;
+    color: #0077cc;
+}
+
+.auth-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.auth-actions button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.auth-actions #loginBtn {
+    background-color: #0077cc;
+    color: white;
+}
+
+.auth-actions #registerBtn {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+body.dark .auth-actions #registerBtn {
+    background-color: #333;
+    color: #eee;
+}
+
+.auth-message {
+    margin-top: 15px;
+    font-size: 0.9rem;
+    color: #dc3545;
+}
+
+#logoutBtn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    background-color: #dc3545;
+    color: white;
+    cursor: pointer;
+}
+
+#userEmailDisplay {
+    padding-right: 10px;
+}
+
+body.dark #userEmailDisplay {
+    color: #aaa;
+}

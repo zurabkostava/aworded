@@ -1,14 +1,19 @@
 //utils.js
 
+/**
+ * განახლებულია: ეს ფუნქცია ახლა მუშაობს 2 რეჟიმში:
+ * 1. (სინქრონულად) მომენტალურად ცვლის UI-ს (პროგრესის ბარს).
+ * 2. (ასინქრონულად) იძახებს updateCardProgressInDB-ს, რომ ცვლილება ბაზაში შეინახოს.
+ */
 function updateCardProgress(card, delta) {
-    autoSyncOnChange?.();
-
     let current = parseFloat(card.dataset.progress || '0');
     current = Math.max(0, Math.min(100, current + delta));
-    card.dataset.progress = current.toFixed(1);
+    const newProgress = parseFloat(current.toFixed(1)); // სუფთა, საბოლოო მნიშვნელობა
 
-    if (parseFloat(card.dataset.progress) >= 100) {
+    card.dataset.progress = newProgress;
 
+    // --- UI-ის განახლება (რჩება იგივე) ---
+    if (newProgress >= 100) {
         card.classList.add('mastered');
     } else {
         card.classList.remove('mastered');
@@ -18,17 +23,53 @@ function updateCardProgress(card, delta) {
     const label = card.querySelector('.progress-label');
 
     if (progressBar) {
-        progressBar.style.width = `${current.toFixed(1)}%`;
-        progressBar.style.backgroundColor = getProgressColor(current);
+        progressBar.style.width = `${newProgress}%`;
+        progressBar.style.backgroundColor = getProgressColor(newProgress);
     }
 
     if (label) {
-        label.textContent = `${current.toFixed(1)}%`;
+        label.textContent = `${newProgress}%`;
+    }
+    // --- UI-ის განახლების დასასრული ---
+
+
+    // --- NEW: ბაზის განახლების გამოძახება ---
+    const cardId = card.dataset.id;
+    if (cardId) {
+        // ჩვენ ვიძახებთ async ფუნქციას, მაგრამ არ "ველოდებით" (no await)
+        // ეს UI-ს მომენტალურად ანახლებს და ბაზას ფონურ რეჟიმში წერს.
+        updateCardProgressInDB(cardId, newProgress);
+    } else {
+        console.warn("Skipping progress save: card.dataset.id is missing.");
     }
 
-    if (typeof saveToStorage === 'function') saveToStorage();
-
+    // ძველი saveToStorage() აღარ გვჭირდება.
 }
+
+/**
+ * NEW: ეს ფუნქცია კონკრეტულად Supabase-ში ანახლებს პროგრესს
+ */
+async function updateCardProgressInDB(cardId, newProgress) {
+    // ვამოწმებთ, რომ კლიენტი არსებობს (script.js-დან)
+    if (!cardId || typeof supabaseClient === 'undefined') {
+        console.error("Cannot update progress: Card ID or Supabase Client is missing.");
+        return;
+    }
+
+    const { error } = await supabaseClient
+        .from('cards')
+        .update({
+            progress: newProgress,
+            updated_at: new Date().toISOString() // განახლების დროის დაფიქსირება
+        })
+        .eq('id', cardId); // ვანახლებთ მხოლოდ ამ ID-ის ბარათს
+
+    if (error) {
+        console.error(`DB Progress Update Error for ${cardId}:`, error.message);
+        // showToast(`პროგრესის შენახვა ვერ მოხერხდა`, "error"); // (სურვილისამებრ)
+    }
+}
+
 
 function getProgressColor(percent) {
     if (percent <= 10) return '#eee';
@@ -38,37 +79,4 @@ function getProgressColor(percent) {
     if (percent < 100) return '#66bb6a';
     return '#55d288';
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    const allCards = document.querySelectorAll('.card');
-    allCards.forEach(card => {
-        const progress = parseFloat(card.dataset.progress || '0');
-        if (progress >= 100) {
-            card.classList.add('mastered');
-        }
-
-        const progressBar = card.querySelector('.progress-bar');
-        const label = card.querySelector('.progress-label');
-
-        if (progressBar) {
-            progressBar.style.width = `${progress.toFixed(1)}%`;
-            progressBar.style.backgroundColor = getProgressColor(progress);
-        }
-
-        if (label) {
-            label.textContent = `${progress.toFixed(1)}%`;
-        }
-    });
-});
-
-document.getElementById('hideMasteredCheckbox').addEventListener('change', (e) => {
-    const hide = e.target.checked;
-    document.querySelectorAll('.card').forEach(card => {
-        const progress = parseFloat(card.dataset.progress || '0');
-        card.style.display = (hide && progress >= 100) ? 'none' : 'block';
-    });
-});
-
-
-
 

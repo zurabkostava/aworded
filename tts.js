@@ -47,6 +47,7 @@ function loadSpeechRates() {
 function populateVoiceDropdown() {
     const voices = speechSynthesis.getVoices();
     const voiceSelect = document.getElementById('voiceSelect');
+    if (!voiceSelect) return; // <-- დაცვის დამატება
     voiceSelect.innerHTML = '';
 
     allowedVoicesEnglish.forEach(name => {
@@ -67,6 +68,7 @@ function populateVoiceDropdown() {
 function populateGeorgianDropdown() {
     const voices = speechSynthesis.getVoices();
     const geoSelect = document.getElementById('georgianVoiceSelect');
+    if (!geoSelect) return; // <-- დაცვის დამატება
     geoSelect.innerHTML = '';
 
     allowedVoicesGeorgian.forEach(name => {
