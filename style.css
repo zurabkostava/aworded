@@ -5307,3 +5307,22 @@ body.dark #userEmailDisplay {
     color: #aaa;
 
 }
+
+/* ==== Card "+N" Tag Badge Style ==== */
+.card-tag-more {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    color: #555;
+    background-color: #f0f0f0;
+    font-weight: 600;
+    margin-left: 4px; /* პატარა დაშორება */
+    cursor: default; /* კურსორი არ სჭირდება */
+}
+
+/* Dark Mode ვერსია */
+body.dark .card-tag-more {
+    background-color: #333;
+    color: #aaa;
+}

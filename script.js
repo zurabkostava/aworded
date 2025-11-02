@@ -1228,12 +1228,30 @@ function renderCardFromData(data) {
 
     const translationHTML = `${cardData.mainTranslations.join(', ')}<span class="extra">${cardData.extraTranslations.join(', ')}</span>`;
 
-    const tagHTML = cardData.tags.map(tag => {
+    // --- NEW: თეგების შეზღუდვის ლოგიკა (+N) ---
+    let tagHTML = '';
+    const maxVisibleTags = 3; // ვაჩვენებთ მაქსიმუმ 3 თეგს
+    const totalTags = cardData.tags.length;
+
+    // 1. ვაჩვენებთ პირველ 3 თეგს
+    tagHTML = cardData.tags.slice(0, maxVisibleTags).map(tag => {
         const color = getColorForTag(tag);
-        return `<span class="card-tag" style="background-color: ${color}">${tag}</span>`; // <-- # ამოღებულია
+        return `<span class="card-tag" style="background-color: ${color}">${tag}</span>`;
     }).join('');
 
+    // 2. თუ მეტია, ვამატებთ "+N" ბეიჯს
+    // 2. თუ მეტია, ვამატებთ "+N" ბეიჯს (თულთიფით დესკტოპისთვის)
+    if (totalTags > maxVisibleTags) {
+        const hiddenCount = totalTags - maxVisibleTags;
 
+        // --- NEW: ვიღებთ დამალულ თეგებს ---
+        const hiddenTags = cardData.tags.slice(maxVisibleTags).join(', '); // მაგ: "Verbs, Food, Travel"
+        // --- END NEW ---
+
+        // ვამატებთ ბეიჯს და ვსვამთ `title` ატრიბუტს
+        tagHTML += ` <span class="card-tag-more" title="${hiddenTags}">+${hiddenCount}</span>`;
+    }
+    // --- END NEW LOGIC ---
 
     const card = document.createElement('div');
 
@@ -1890,13 +1908,15 @@ function addLongPressHandlers(card) {
 
 // თუ აქამდე მოვედით, ეს ნიშნავს, რომ ცარიელ ადგილს დავაჭირეთ -> ვხსნით Preview-ს
 
+// თუ აქამდე მოვედით, ეს ნიშნავს, რომ ცარიელ ადგილს დავაჭირეთ -> ვხსნით Preview-ს
         const word = card.querySelector('.word').textContent;
-
         const mainPart = card.querySelector('.translation').childNodes[0]?.textContent?.trim() || '';
-
         const extraPart = card.querySelector('.translation .extra')?.textContent?.trim() || '';
 
-        const tags = [...card.querySelectorAll('.tags span')].map(s => s.textContent.replace('#', ''));
+        // --- FIX: ვკითხულობთ თეგებს data-set-დან (სადაც სრული სიაა) და არა DOM-იდან ---
+        const tagObjects = JSON.parse(card.dataset.tagObjects || '[]');
+        const tags = tagObjects.map(tagObj => tagObj.name); // ვიღებთ სუფთა სახელებს
+        // --- END FIX ---
 
 
 
