@@ -1229,11 +1229,8 @@ function renderCardFromData(data) {
     const translationHTML = `${cardData.mainTranslations.join(', ')}<span class="extra">${cardData.extraTranslations.join(', ')}</span>`;
 
     const tagHTML = cardData.tags.map(tag => {
-
         const color = getColorForTag(tag);
-
-        return `<span class="card-tag" style="background-color: ${color}">#${tag}</span>`;
-
+        return `<span class="card-tag" style="background-color: ${color}">${tag}</span>`; // <-- # ამოღებულია
     }).join('');
 
 
@@ -1549,15 +1546,10 @@ data-lang="ka">
     tagContainer.innerHTML = '';
 
     tags.forEach(tag => {
-
         const span = document.createElement('span');
-
-        span.textContent = `#${tag}`;
-
+        span.textContent = `${tag}`; // <-- # ამოღებულია
         span.style.backgroundColor = getColorForTag(tag);
-
         tagContainer.appendChild(span);
-
     });
 
 
