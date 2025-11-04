@@ -1633,20 +1633,19 @@ data-lang="ka">
 
 
 function loadCardIntoModal(card) {
-
     document.getElementById('previewTranslation')?.classList.remove('highlighted-sentence');
-
     const word = card.querySelector('.word').textContent.trim();
-
     const translationEl = card.querySelector('.translation');
-
     const mainPart = translationEl.childNodes[0]?.textContent?.trim() || '';
-
     const extraPart = translationEl.querySelector('.extra')?.textContent?.trim() || '';
 
-    const tags = [...card.querySelectorAll('.tags span')].map(s => s.textContent.replace('#', ''));
+    // --- FIX: ვკითხულობთ თეგებს data-set-დან (სადაც სრული სიაა) ---
+    const tagObjects = JSON.parse(card.dataset.tagObjects || '[]');
+    const tags = tagObjects.map(tagObj => tagObj.name);
+    // --- END FIX ---
 
     const en = JSON.parse(card.dataset.english || '[]');
+    // ...
 
     const ge = JSON.parse(card.dataset.georgian || '[]');
 
@@ -3779,22 +3778,19 @@ document.addEventListener('DOMContentLoaded', () => {
 // Excel Import/Export
 
     document.getElementById('exportExcelBtn').onclick = () => {
-
-// ... (export logic is fine)
-
+        // ... (export logic is fine)
         const cards = [...document.querySelectorAll('.card')].map(card => {
-
             const word = card.querySelector('.word').textContent.trim();
-
             const mainText = card.querySelector('.translation').childNodes[0]?.textContent?.trim() || '';
-
             const extraText = card.querySelector('.translation .extra')?.textContent?.trim() || '';
 
-            const tags = [...card.querySelectorAll('.tags span')].map(s => s.textContent.replace('#', '')).join(', ');
+            // --- FIX: ვკითხულობთ თეგებს data-set-დან (სადაც სრული სიაა) ---
+            const tagObjects = JSON.parse(card.dataset.tagObjects || '[]');
+            const tags = tagObjects.map(tagObj => tagObj.name).join(', '); // ვწერთ სრულ სიას
+            // --- END FIX ---
 
-// --- FIX: ექსპორტისას \n-ის ნაცვლად ვწერთ <br> -ს ---
-            // --- FIX V3: ექსპორტისას ვიყენებთ <br>-ს (სფეისების გარეშე) ---
             const englishSentences = JSON.parse(card.dataset.english || '[]').join('<br>');
+            // ...
             const georgianSentences = JSON.parse(card.dataset.georgian || '[]').join('<br>');
             // --- END FIX V3 ---
             // --- END FIX ---
