@@ -3830,8 +3830,72 @@ document.addEventListener('DOMContentLoaded', () => {
         XLSX.utils.book_append_sheet(workbook, worksheet, "Words");
 
         XLSX.writeFile(workbook, "english_words_with_progress.xlsx");
-
     };
+
+    // ==== NEW "MY DICTIONARY" EXPORT FUNCTION (V3 - FINAL) ====
+    document.getElementById('exportMyDictionaryBtn').onclick = () => {
+        const cards = [...document.querySelectorAll('.card')].map(card => {
+
+            // 1. ვიღებთ "სუფთა" მონაცემებს dataset-იდან
+            const word = card.querySelector('.word').textContent.trim();
+            const tagObjects = JSON.parse(card.dataset.tagObjects || '[]');
+
+            // === NEW: თეგებს ვაერთებთ ";" -ით ===
+            const tags = tagObjects.map(tagObj => tagObj.name).join('; '); //
+
+            // 2. ვიღებთ თარგმანებს (ცალ-ცალკე)
+            const mainText = card.querySelector('.translation').childNodes[0]?.textContent?.trim() || '';
+            const extraText = card.querySelector('.translation .extra')?.textContent?.trim() || '';
+
+            // 3. ვამრგვალებთ პროგრესს
+            const progress = Math.round(parseFloat(card.dataset.progress || '0')) + '%'; //
+
+            // 4. ვაწყვილებთ წინადადებებს (შენი მოთხოვნისამებრ)
+            const englishSentences = JSON.parse(card.dataset.english || '[]');
+            const georgianSentences = JSON.parse(card.dataset.georgian || '[]');
+
+            const pairedExamples = [];
+            const maxLen = Math.max(englishSentences.length, georgianSentences.length);
+
+            for (let i = 0; i < maxLen; i++) {
+                const en = englishSentences[i] || ''; // ვიღებთ ინგლისურს (ან ცარიელს)
+                const ge = georgianSentences[i] || ''; // ვიღებთ ქართულს (ან ცარიელს)
+                pairedExamples.push(`${en} — ${ge}`); // ვაწყვილებთ " — " ტირეთი
+            }
+
+            // ვაერთებთ ახალი ხაზით (\n), როგორც ექსელში (ALT+ENTER)
+            const examplesString = pairedExamples.join('\n'); //
+
+            // 5. ვაწყობთ ობიექტს ზუსტად შენი თანმიმდევრობით
+            return {
+                'Learned': progress,
+                'Tags': tags,
+                'Word': word,
+                'Transcription': '', // === NEW: დავამატეთ ცარიელი სვეტი ===
+                'Translation': mainText,
+                'Additional Translation': extraText,
+                'Examples': examplesString
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(cards);
+
+        // სვეტების სიგანეები (განახლებული)
+        worksheet['!cols'] = [
+            { wch: 10 }, // Learned
+            { wch: 25 }, // Tags
+            { wch: 20 }, // Word
+            { wch: 15 }, // Transcription (NEW)
+            { wch: 30 }, // Translation
+            { wch: 30 }, // Additional Translation
+            { wch: 80 }  // Examples
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "My Dictionary");
+        XLSX.writeFile(workbook, "my_dictionary_export.xlsx"); // ვიყენებთ .xlsx-ს
+    };
+    // ==== END NEW FUNCTION (V3 - FINAL) ====
 
 
 
