@@ -1,77 +1,68 @@
-// ==== sw.js - AWorded Service Worker (Push Notifications) ====
-const SW_VERSION = 9;
-const SUPABASE_PUSH_URL = 'https://wdgvxerfxwtmpqztwgtj.supabase.co/functions/v1/get-push-notification';
+// ==== AWorded Service Worker ====
+const SW_VERSION = 10;
+const PUSH_URL = 'https://wdgvxerfxwtmpqztwgtj.supabase.co/functions/v1/get-push-notification';
 
-self.addEventListener('install', () => {
-    self.skipWaiting();
-});
+self.addEventListener('install', () => self.skipWaiting());
 
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', event => {
     event.waitUntil(
-        caches.keys().then(keys =>
-            Promise.all(keys.map(key => caches.delete(key)))
-        ).then(() => self.clients.claim())
+        caches.keys()
+            .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+            .then(() => self.clients.claim())
     );
 });
 
-// ==== Push Notification Handler ====
-self.addEventListener('push', (event) => {
+// ==== Push: fetch content from queue, show notification ====
+self.addEventListener('push', event => {
     event.waitUntil((async () => {
         let title = 'AWorded';
         let body = 'დროა ისწავლო!';
         let tag = 'aworded-push';
 
         try {
-            // Get own push endpoint to identify ourselves
             const sub = await self.registration.pushManager.getSubscription();
             if (sub) {
-                const res = await fetch(`${SUPABASE_PUSH_URL}?endpoint=${encodeURIComponent(sub.endpoint)}`);
+                const res = await fetch(`${PUSH_URL}?endpoint=${encodeURIComponent(sub.endpoint)}`);
                 if (res.ok) {
-                    const data = await res.json();
-                    title = data.title || title;
-                    body = data.body || body;
-                    // Use schedule_id as tag so it matches client-side checker (prevents double notification)
-                    if (data.schedule_id) tag = `aworded-${data.schedule_id}`;
+                    const d = await res.json();
+                    if (d.title) title = d.title;
+                    if (d.body) body = d.body;
+                    if (d.schedule_id) tag = `aworded-${d.schedule_id}`;
                 }
             }
         } catch (e) {
-            console.error('[SW] Failed to fetch push content:', e);
+            console.error('[SW] push fetch error:', e);
         }
 
         return self.registration.showNotification(title, {
             body,
+            tag,
             icon: './icons/logo.svg',
             badge: './icons/logo.svg',
-            tag,
             renotify: true,
         });
     })());
 });
 
-// ==== Message Handler (for direct notifications from page) ====
-self.addEventListener('message', (event) => {
-    const data = event.data;
-
-    if (data.type === 'SHOW_NOTIFICATION') {
-        self.registration.showNotification(data.title || 'AWorded', {
-            body: data.body || '',
-            icon: data.icon || './icons/logo.svg',
+// ==== Message from page: show notification directly ====
+self.addEventListener('message', event => {
+    const d = event.data;
+    if (d?.type === 'SHOW_NOTIFICATION') {
+        self.registration.showNotification(d.title || 'AWorded', {
+            body: d.body || '',
+            icon: d.icon || './icons/logo.svg',
             badge: './icons/logo.svg',
-            tag: data.tag || 'aworded-reminder',
-            renotify: true
+            tag: d.tag || 'aworded-reminder',
+            renotify: true,
         });
     }
 });
 
-// ==== Notification Click Handler ====
-self.addEventListener('notificationclick', (event) => {
+// ==== Click: open/focus app ====
+self.addEventListener('notificationclick', event => {
     event.notification.close();
     event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
-            if (clients.length > 0) {
-                return clients[0].focus();
-            }
-            return self.clients.openWindow('./');
-        })
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then(clients => clients.length > 0 ? clients[0].focus() : self.clients.openWindow('./'))
     );
 });
