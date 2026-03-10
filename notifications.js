@@ -390,7 +390,7 @@ function updateServiceWorkerSchedules() {
 async function registerNotificationSW() {
     if (!('serviceWorker' in navigator)) return;
     try {
-        const reg = await navigator.serviceWorker.register('/sw.js');
+        const reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
         // Pass schedules once SW is active
         if (reg.active) {
             reg.active.postMessage({

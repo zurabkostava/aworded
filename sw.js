@@ -1,5 +1,5 @@
 // ==== sw.js - AWorded Service Worker ====
-const SW_VERSION = 3;
+const SW_VERSION = 4;
 const CACHE_NAME = 'aworded-v3';
 
 let schedules = [];

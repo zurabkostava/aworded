@@ -11,6 +11,12 @@
 
     <link href="style.css" rel="stylesheet"/>
 
+    <script>
+        // Register SW immediately for network-first caching
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+        }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script defer src="supabase-client.js"></script>
     <script defer src="script.js"></script>
