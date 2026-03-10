@@ -6,6 +6,20 @@ let notifCheckInterval = null;
 let lastFiredKey = ''; // prevents double-firing within same minute
 let editingNotifIndex = -1; // -1 = adding new, >= 0 = editing existing
 
+// Detect if running inside an iframe
+function isInIframe() {
+    try { return window.self !== window.top; } catch { return true; }
+}
+
+// Listen for permission responses from parent
+if (isInIframe()) {
+    window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'NOTIFICATION_PERMISSION') {
+            window._parentNotifPermission = event.data.permission;
+        }
+    });
+}
+
 function loadNotificationSchedules() {
     try {
         notificationSchedules = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY)) || [];
@@ -251,6 +265,11 @@ function initNotificationUI() {
 }
 
 async function requestNotificationPermission() {
+    if (isInIframe()) {
+        // Ask parent page to request permission
+        window.parent.postMessage({ type: 'REQUEST_NOTIFICATION_PERMISSION' }, '*');
+        return;
+    }
     if (!('Notification' in window)) return;
     if (Notification.permission === 'default') {
         await Notification.requestPermission();
@@ -263,7 +282,10 @@ function startNotificationChecker() {
 }
 
 async function checkNotificationSchedule() {
-    if (Notification.permission !== 'granted') return;
+    // In iframe, check parent permission; otherwise check directly
+    if (isInIframe()) {
+        if (window._parentNotifPermission !== 'granted') return;
+    } else if (Notification.permission !== 'granted') return;
 
     const now = new Date();
     const currentDay = now.getDay(); // 0=Sun, 1=Mon, ...
@@ -324,6 +346,17 @@ async function showNotificationWithCard(notif) {
         body = translations;
     } else {
         body = dictName;
+    }
+
+    // If in iframe, delegate notification to parent page
+    if (isInIframe()) {
+        window.parent.postMessage({
+            type: 'SHOW_NOTIFICATION',
+            title: title,
+            body: body,
+            icon: 'https://zurabkostava.github.io/aworded/icons/logo.svg'
+        }, '*');
+        return;
     }
 
     // Try service worker notification first (persists even if tab not focused)
