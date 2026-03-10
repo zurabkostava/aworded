@@ -37,7 +37,9 @@ async function subscribeToPush(forceNew = false) {
         let subscription = await reg.pushManager.getSubscription();
 
         // Unsubscribe if forced or subscription is dead
+        let oldEndpoint = null;
         if (subscription && (forceNew || subscription.endpoint.includes('permanently-removed'))) {
+            oldEndpoint = subscription.endpoint;
             await subscription.unsubscribe();
             subscription = null;
         }
@@ -60,8 +62,11 @@ async function subscribeToPush(forceNew = false) {
         if (typeof supabaseClient !== 'undefined' && typeof currentUser !== 'undefined' && currentUser) {
             const key = subscription.toJSON();
             if (forceNew) {
-                // Delete all old subs for this user, insert fresh one
-                await supabaseClient.from('push_subscriptions').delete().eq('user_id', currentUser.id);
+                // Delete only the old endpoint for THIS device (preserve other devices)
+                if (oldEndpoint) {
+                    await supabaseClient.from('push_subscriptions').delete()
+                        .eq('user_id', currentUser.id).eq('endpoint', oldEndpoint);
+                }
                 await supabaseClient.from('push_subscriptions').insert({
                     user_id: currentUser.id,
                     endpoint: key.endpoint,

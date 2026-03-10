@@ -116,7 +116,7 @@ Deno.serve(async () => {
           user_id: s.user_id, title, body, schedule_id: s.id, endpoint: sub.endpoint,
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         })
-        if (qErr) console.error('push_queue insert failed:', qErr.message)
+        if (qErr) { errors++; console.error('push_queue insert failed:', qErr.message); continue }
 
         try {
           await sendPush(sub.endpoint)
