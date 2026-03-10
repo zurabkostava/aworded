@@ -963,7 +963,21 @@ function loadCardsFromStorage() {
 // =======================================================
 async function loadDictionaries() {
     if (!currentUser || currentUser.id === 'offline-user') return;
-    const {data, error} = await supabaseClient.from('dictionaries').select('*').eq('user_id', currentUser.id).order('created_at');
+    console.log('[AWorded] loadDictionaries: starting query...');
+    let data, error;
+    try {
+        const result = await Promise.race([
+            supabaseClient.from('dictionaries').select('*').eq('user_id', currentUser.id).order('created_at'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Dictionary query timeout (10s)')), 10000))
+        ]);
+        data = result.data;
+        error = result.error;
+    } catch (e) {
+        console.error('[AWorded] loadDictionaries exception:', e.message);
+        showToast(`შეცდომა: ${e.message}`, "error");
+        return;
+    }
+    console.log('[AWorded] loadDictionaries: got', data?.length, 'dictionaries, error:', error?.message);
     if (error) {
         showToast(`Error loading dictionaries: ${error.message}`, "error");
         return;
@@ -1004,8 +1018,13 @@ function renderDictionaryDropdown() {
 }
 
 async function loadDataFromSupabase(retryCount = 0) {
-    if (!currentUser) return;
-    if (currentUser.id === 'offline-user') return; // Skip DB calls in offline mode
+    if (!currentUser) { console.warn('[AWorded] loadData: no currentUser'); return; }
+    if (currentUser.id === 'offline-user') return;
+    console.log('[AWorded] loadData: starting, dictionaryId:', currentDictionaryId, 'retry:', retryCount);
+    if (!currentDictionaryId) {
+        console.error('[AWorded] loadData: currentDictionaryId is null/undefined!');
+        return;
+    }
 // 1. ვიღებთ *ყველა* მონაცემს პარალელურად
     let cardsResponse, tagsResponse, relationsResponse;
     try {
