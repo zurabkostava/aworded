@@ -963,23 +963,11 @@ function loadCardsFromStorage() {
 // =======================================================
 async function loadDictionaries() {
     if (!currentUser || currentUser.id === 'offline-user') return;
-    console.log('[AWorded] loadDictionaries: starting query...');
-    let data, error;
-    try {
-        const result = await Promise.race([
-            supabaseClient.from('dictionaries').select('*').eq('user_id', currentUser.id).order('created_at'),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Dictionary query timeout (20s)')), 20000))
-        ]);
-        data = result.data;
-        error = result.error;
-    } catch (e) {
-        console.error('[AWorded] loadDictionaries exception:', e.message);
-        showToast(`შეცდომა: ${e.message}`, "error");
-        return;
-    }
-    console.log('[AWorded] loadDictionaries: got', data?.length, 'dictionaries, error:', error?.message);
+    console.log('[AWorded] loadDictionaries: querying...');
+    const {data, error} = await supabaseClient.from('dictionaries').select('*').eq('user_id', currentUser.id).order('created_at');
+    console.log('[AWorded] loadDictionaries: result -', data?.length, 'dicts, error:', error?.message || 'none');
     if (error) {
-        showToast(`Error loading dictionaries: ${error.message}`, "error");
+        console.error('[AWorded] loadDictionaries error:', error);
         return;
     }
     allDictionaries = data || [];
@@ -1214,31 +1202,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         } catch(e) { console.error('[AWorded] CRASH at pre-load setup:', e); }
-        console.log('[AWorded] pre-load setup done, calling loadDictionaries...');
+        console.log('[AWorded] pre-load setup done, loading data...');
 // *** ლექსიკონების და მონაცემების ჩატვირთვა ბაზიდან ***
-        // Retry loadDictionaries up to 3 times with increasing delay
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                await loadDictionaries();
-                console.log('[AWorded] Dictionaries loaded (attempt ' + attempt + '), currentDictionaryId:', currentDictionaryId);
-            } catch (e) {
-                console.error('[AWorded] loadDictionaries failed (attempt ' + attempt + '):', e);
-            }
-            if (currentDictionaryId) break;
-            console.warn('[AWorded] No dictionary ID after attempt ' + attempt + ', retrying in ' + (attempt * 2) + 's...');
-            await new Promise(r => setTimeout(r, attempt * 2000));
-        }
+        await loadDictionaries();
         if (currentDictionaryId) {
-            try {
-                await loadDataFromSupabase();
-                console.log('[AWorded] Data loaded, cards:', document.querySelectorAll('.card').length);
-            } catch (e) {
-                console.error('[AWorded] loadDataFromSupabase failed:', e);
-            }
-        } else {
-            console.error('[AWorded] Failed to load dictionaries after 3 attempts');
-            showToast('მონაცემების ჩატვირთვა ვერ მოხერხდა. გადატვირთეთ გვერდი.', 'error');
+            await loadDataFromSupabase();
         }
+        console.log('[AWorded] Initial load complete. Dictionary:', currentDictionaryId, 'Cards:', document.querySelectorAll('.card').length);
 // Dictionary switching
         const dictionarySelect = document.getElementById('dictionarySelect');
         if (dictionarySelect) {
