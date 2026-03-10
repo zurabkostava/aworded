@@ -12,12 +12,18 @@
     <link href="style.css" rel="stylesheet"/>
 
     <script>
+        // Apply dark mode immediately to prevent flash
+        if (localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+        }
         // Register SW immediately for network-first caching
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+            navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+                .then(reg => reg.update())
+                .catch(() => {});
         }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="console.error('Supabase CDN failed to load')"></script>
     <script defer src="supabase-client.js"></script>
     <script defer src="script.js"></script>
     <script defer src="games/quiz.js"></script>

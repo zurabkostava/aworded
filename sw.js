@@ -1,6 +1,6 @@
 // ==== sw.js - AWorded Service Worker ====
-const SW_VERSION = 4;
-const CACHE_NAME = 'aworded-v3';
+const SW_VERSION = 5;
+const CACHE_NAME = 'aworded-v5';
 
 let schedules = [];
 let checkInterval = null;
@@ -31,7 +31,7 @@ self.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return;
 
     event.respondWith(
-        fetch(event.request).then(response => {
+        fetch(event.request, { cache: 'no-cache' }).then(response => {
             // Cache the fresh response for offline fallback
             const clone = response.clone();
             caches.open(CACHE_NAME).then(cache => {
