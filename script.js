@@ -1156,6 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ფუნქცია, რომელიც ირთვება დალოგინების შემდეგ
 // ფუნქცია, რომელიც ირთვება დალოგინების შემდეგ
     async function initializeApp() { // <-- გახდა ASYNC
+        console.log('[AWorded] initializeApp started, user:', currentUser?.email);
         mainAppContainer.style.display = 'block';
         authContainer.style.display = 'none';
         userEmailDisplay.textContent = currentUser.email;
@@ -1192,8 +1193,23 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 // *** ლექსიკონების და მონაცემების ჩატვირთვა ბაზიდან ***
-        await loadDictionaries();
-        await loadDataFromSupabase();
+        try {
+            await loadDictionaries();
+            console.log('[AWorded] Dictionaries loaded, currentDictionaryId:', currentDictionaryId);
+        } catch (e) {
+            console.error('[AWorded] loadDictionaries failed:', e);
+        }
+        if (!currentDictionaryId) {
+            console.warn('[AWorded] No dictionary ID after loadDictionaries, retrying...');
+            await new Promise(r => setTimeout(r, 1500));
+            try { await loadDictionaries(); } catch(e) {}
+        }
+        try {
+            await loadDataFromSupabase();
+            console.log('[AWorded] Data loaded, cards:', document.querySelectorAll('.card').length);
+        } catch (e) {
+            console.error('[AWorded] loadDataFromSupabase failed:', e);
+        }
 // Dictionary switching
         const dictionarySelect = document.getElementById('dictionarySelect');
         if (dictionarySelect) {
@@ -2061,38 +2077,42 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==== 3d. აპლიკაციის გაშვება (Auth Check) ====
 // ==== 3d. აპლიკაციის გაშვება (Auth Check) ====
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        console.log('[AWorded] authStateChange:', event, 'session:', !!session);
         if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN')) {
-// მომხმარებელი დალოგინებულია
             currentUser = session.user;
-// NEW: ვამოწმებთ, აპლიკაცია უკვე გაშვებული ხომ არ არის
             if (!isAppInitialized) {
-                isAppInitialized = true; // ავწიოთ ალამი
-                await initializeApp(); // და გავუშვათ ინიციალიზაცია
+                isAppInitialized = true;
+                try {
+                    await initializeApp();
+                } catch (e) {
+                    console.error('[AWorded] initializeApp crashed:', e);
+                    isAppInitialized = false; // Allow retry
+                }
             }
-// თუ isAppInitialized უკვე true-ა, არაფერს ვშვრებით.
         } else if (event === 'SIGNED_OUT') {
-// მომხმარებელი გავიდა
             currentUser = null;
-            showAuthScreen(); // ეს ფუნქცია isAppInitialized-ს დაანულებს
+            showAuthScreen();
         } else if (!session) {
-// სესია არ არსებობს (პირველადი ჩატვირთვა)
             currentUser = null;
-            showAuthScreen(); // ესეც დაანულებს
+            showAuthScreen();
         }
     });
 
-    // Fallback: if onAuthStateChange didn't fire INITIAL_SESSION within 3 seconds, check manually
+    // Fallback: if onAuthStateChange didn't fire or initializeApp failed
     setTimeout(async () => {
-        if (!isAppInitialized && !currentUser) {
+        console.log('[AWorded] Fallback check: isAppInitialized=', isAppInitialized, 'currentUser=', !!currentUser);
+        if (!isAppInitialized) {
             try {
                 const { data: { session } } = await supabaseClient.auth.getSession();
-                if (session && !isAppInitialized) {
+                if (session) {
                     currentUser = session.user;
                     isAppInitialized = true;
                     await initializeApp();
+                } else {
+                    showAuthScreen();
                 }
             } catch (e) {
-                console.warn('Fallback session check failed:', e);
+                console.warn('[AWorded] Fallback session check failed:', e);
             }
         }
     }, 3000);
