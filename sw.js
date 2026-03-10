@@ -1,4 +1,5 @@
 // ==== sw.js - AWorded Service Worker ====
+const SW_VERSION = 2;
 
 let schedules = [];
 let checkInterval = null;
@@ -9,7 +10,12 @@ self.addEventListener('install', () => {
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(self.clients.claim());
+    // Clear all old caches on activation
+    event.waitUntil(
+        caches.keys().then(keys =>
+            Promise.all(keys.map(key => caches.delete(key)))
+        ).then(() => self.clients.claim())
+    );
     startScheduleChecker();
 });
 
