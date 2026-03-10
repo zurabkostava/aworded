@@ -113,7 +113,8 @@ Deno.serve(async () => {
       for (const sub of subs) {
         // Store one queue entry PER DEVICE so each gets its own notification
         const { error: qErr } = await db.from('push_queue').insert({
-          user_id: s.user_id, title, body, schedule_id: s.id, endpoint: sub.endpoint
+          user_id: s.user_id, title, body, schedule_id: s.id, endpoint: sub.endpoint,
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         })
         if (qErr) console.error('push_queue insert failed:', qErr.message)
 
