@@ -363,7 +363,7 @@ async function initNotificationUI() {
             if (debugEl) debugEl.textContent = info;
             console.log('[Notif Test]', info);
 
-            // Request permission if needed
+            // Request permission if needed (only when NOT in iframe)
             if (!inIframe && notifSupported && notifPermission === 'default') {
                 const result = await Notification.requestPermission();
                 info += ` | Requested: ${result}`;
@@ -372,6 +372,10 @@ async function initNotificationUI() {
                     showToast('ნოტიფიკაციის ნებართვა არ მოგეცათ', 'error');
                     return;
                 }
+            }
+            // In iframe, request permission from parent
+            if (inIframe) {
+                window.parent.postMessage({ type: 'REQUEST_NOTIFICATION_PERMISSION' }, '*');
             }
 
             // Try to show a test notification
@@ -396,13 +400,24 @@ async function initNotificationUI() {
 
 async function requestNotificationPermission() {
     if (isInIframe()) {
+        // Ask parent page to request permission and report back
         window.parent.postMessage({ type: 'REQUEST_NOTIFICATION_PERMISSION' }, '*');
+        // Also ask parent for current permission status
+        window.parent.postMessage({ type: 'GET_NOTIFICATION_PERMISSION' }, '*');
         return;
     }
     if (!('Notification' in window)) return;
     if (Notification.permission === 'default') {
         await Notification.requestPermission();
     }
+}
+
+function hasNotificationPermission() {
+    if (isInIframe()) {
+        // In iframe, assume permission is handled by parent — always try to send
+        return true;
+    }
+    return 'Notification' in window && Notification.permission === 'granted';
 }
 
 // ==== Notification Checker ====
@@ -413,9 +428,7 @@ function startNotificationChecker() {
 }
 
 async function checkNotificationSchedule() {
-    if (isInIframe()) {
-        if (window._parentNotifPermission !== 'granted') return;
-    } else if (Notification.permission !== 'granted') return;
+    if (!hasNotificationPermission()) return;
 
     const now = new Date();
     const currentDay = now.getDay();
