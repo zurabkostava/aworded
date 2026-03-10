@@ -460,8 +460,16 @@ async function initNotificationUI() {
 
 // ==== Client-side Schedule Checker ====
 
-function startNotificationChecker() {
+async function startNotificationChecker() {
     if (notifCheckInterval) clearInterval(notifCheckInterval);
+
+    // If push subscription is active, skip client-side checker — push handles it
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) return;
+    } catch {}
+
     notifCheckInterval = setInterval(checkNotificationSchedule, 30000);
 }
 
