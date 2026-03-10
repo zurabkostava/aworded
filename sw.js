@@ -19,6 +19,7 @@ self.addEventListener('push', (event) => {
     event.waitUntil((async () => {
         let title = 'AWorded';
         let body = 'დროა ისწავლო!';
+        let tag = 'aworded-push';
 
         try {
             // Get own push endpoint to identify ourselves
@@ -29,6 +30,8 @@ self.addEventListener('push', (event) => {
                     const data = await res.json();
                     title = data.title || title;
                     body = data.body || body;
+                    // Use schedule_id as tag so it matches client-side checker (prevents double notification)
+                    if (data.schedule_id) tag = `aworded-${data.schedule_id}`;
                 }
             }
         } catch (e) {
@@ -39,7 +42,7 @@ self.addEventListener('push', (event) => {
             body,
             icon: './icons/logo.svg',
             badge: './icons/logo.svg',
-            tag: 'aworded-push',
+            tag,
             renotify: true,
         });
     })());

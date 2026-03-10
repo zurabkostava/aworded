@@ -123,7 +123,7 @@ Deno.serve(async (_req) => {
       } catch { /* use defaults */ }
 
       // Store notification in queue for SW to fetch
-      await supabase.from('push_queue').insert({ user_id: schedule.user_id, title, body })
+      await supabase.from('push_queue').insert({ user_id: schedule.user_id, title, body, schedule_id: schedule.id })
 
       // Clean up expired entries
       await supabase.from('push_queue').delete().lt('expires_at', now.toISOString())

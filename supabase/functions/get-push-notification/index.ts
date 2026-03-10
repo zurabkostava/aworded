@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
     if (notif) {
       // Delete it so it's not shown twice
       await supabase.from('push_queue').delete().eq('id', notif.id)
-      return new Response(JSON.stringify({ title: notif.title, body: notif.body }), { headers: CORS })
+      return new Response(JSON.stringify({ title: notif.title, body: notif.body, schedule_id: notif.schedule_id }), { headers: CORS })
     }
 
     return new Response(JSON.stringify({ title: 'AWorded', body: 'დროა ისწავლო!' }), { headers: CORS })
