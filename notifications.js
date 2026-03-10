@@ -446,6 +446,88 @@ async function initNotificationUI() {
 
     // Subscribe to push notifications
     await subscribeToPush();
+
+    // Start client-side schedule checker (works while browser is open)
+    startNotificationChecker();
+}
+
+// ==== Client-side Schedule Checker ====
+
+function startNotificationChecker() {
+    if (notifCheckInterval) clearInterval(notifCheckInterval);
+    notifCheckInterval = setInterval(checkNotificationSchedule, 30000);
+}
+
+async function checkNotificationSchedule() {
+    // Check permission
+    if ('Notification' in window && Notification.permission !== 'granted') return;
+
+    const now = new Date();
+    const currentDay = now.getDay();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    for (let index = 0; index < notificationSchedules.length; index++) {
+        const notif = notificationSchedules[index];
+        if (!notif.enabled) continue;
+        if (notif.time !== currentTime) continue;
+        if (!notif.days.includes(currentDay)) continue;
+
+        const fireKey = `${notif.id || index}-${currentTime}-${currentDay}-${now.toDateString()}`;
+        if (fireKey === lastFiredKey) continue;
+        lastFiredKey = fireKey;
+
+        await showNotificationWithCard(notif);
+    }
+}
+
+async function fetchRandomCard(dictionaryId, tagNames, progressRange) {
+    if (typeof supabaseClient === 'undefined' || typeof currentUser === 'undefined' || !currentUser) return null;
+    try {
+        let progressMin = null;
+        let progressMax = null;
+        if (progressRange) {
+            const parts = progressRange.split('-');
+            progressMin = parseInt(parts[0]);
+            progressMax = parseInt(parts[1]);
+        }
+        const { data, error } = await supabaseClient.rpc('get_random_card', {
+            dict_id_input: dictionaryId || null,
+            tag_names_input: tagNames && tagNames.length > 0 ? tagNames : null,
+            progress_min_input: progressMin,
+            progress_max_input: progressMax
+        }).single();
+        if (error || !data) return null;
+        return data;
+    } catch {
+        return null;
+    }
+}
+
+async function showNotificationWithCard(notif) {
+    const dictName = getDictionaryNameById(notif.dictionaryId);
+    const card = await fetchRandomCard(notif.dictionaryId, notif.tags, notif.progressRange);
+
+    let title = 'AWorded';
+    let body;
+
+    if (card) {
+        title = card.word || 'AWorded';
+        body = (card.main_translations || []).join(', ');
+    } else {
+        body = dictName;
+    }
+
+    // Show via service worker (persists even if tab not focused)
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'SHOW_NOTIFICATION',
+            title,
+            body,
+            icon: './icons/logo.svg'
+        });
+    } else if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body, icon: './icons/logo.svg', tag: 'aworded-reminder' });
+    }
 }
 
 // ==== Service Worker Registration ====
