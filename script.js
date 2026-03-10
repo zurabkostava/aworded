@@ -1176,41 +1176,45 @@ document.addEventListener('DOMContentLoaded', () => {
 // ფუნქცია, რომელიც ირთვება დალოგინების შემდეგ
     async function initializeApp() { // <-- გახდა ASYNC
         console.log('[AWorded] initializeApp started, user:', currentUser?.email);
-        mainAppContainer.style.display = 'block';
-        authContainer.style.display = 'none';
-        userEmailDisplay.textContent = currentUser.email;
-        const stored = localStorage.getItem(TEXTAREA_STORAGE_KEY);
-        const btn = document.getElementById("downloadTemplateBtn");
-        const quizTab = document.getElementById('quizTab');
-        if (quizTab) {
-            createQuizUI();
-        }
-        if (btn) {
-            btn.addEventListener("click", () => {
-                const templateData = [
-                    ["Word", "MainTranslations", "ExtraTranslations", "Tags", "EnglishSentences", "GeorgianSentences"]
-                ];
-                const worksheet = XLSX.utils.aoa_to_sheet(templateData);
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
-                XLSX.writeFile(workbook, "template.xlsx");
-            });
-        }
-        document.addEventListener('click', () => {
-            loadVoices();
-            loadVoicesWithDelay();
-        }, {once: true});
-        if (stored) {
-            const data = JSON.parse(stored);
-            englishSentencesInput.value = data.english || '';
-            georgianSentencesInput.value = data.georgian || '';
-        }
-// ვიყენებთ მშობელი scope-დან აღებულ ცვლადებს
-        if (closePreviewBtn && previewModal) {
-            closePreviewBtn.addEventListener('click', () => {
-                previewModal.style.display = 'none';
-            });
-        }
+        try {
+            mainAppContainer.style.display = 'block';
+            authContainer.style.display = 'none';
+            userEmailDisplay.textContent = currentUser.email;
+        } catch(e) { console.error('[AWorded] CRASH at UI setup:', e); }
+        try {
+            const stored = localStorage.getItem(TEXTAREA_STORAGE_KEY);
+            const btn = document.getElementById("downloadTemplateBtn");
+            const quizTab = document.getElementById('quizTab');
+            if (quizTab) {
+                createQuizUI();
+            }
+            if (btn) {
+                btn.addEventListener("click", () => {
+                    const templateData = [
+                        ["Word", "MainTranslations", "ExtraTranslations", "Tags", "EnglishSentences", "GeorgianSentences"]
+                    ];
+                    const worksheet = XLSX.utils.aoa_to_sheet(templateData);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+                    XLSX.writeFile(workbook, "template.xlsx");
+                });
+            }
+            document.addEventListener('click', () => {
+                loadVoices();
+                loadVoicesWithDelay();
+            }, {once: true});
+            if (stored) {
+                const data = JSON.parse(stored);
+                if (englishSentencesInput) englishSentencesInput.value = data.english || '';
+                if (georgianSentencesInput) georgianSentencesInput.value = data.georgian || '';
+            }
+            if (closePreviewBtn && previewModal) {
+                closePreviewBtn.addEventListener('click', () => {
+                    previewModal.style.display = 'none';
+                });
+            }
+        } catch(e) { console.error('[AWorded] CRASH at pre-load setup:', e); }
+        console.log('[AWorded] pre-load setup done, calling loadDictionaries...');
 // *** ლექსიკონების და მონაცემების ჩატვირთვა ბაზიდან ***
         try {
             await loadDictionaries();
