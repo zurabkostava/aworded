@@ -968,7 +968,7 @@ async function loadDictionaries() {
     try {
         const result = await Promise.race([
             supabaseClient.from('dictionaries').select('*').eq('user_id', currentUser.id).order('created_at'),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Dictionary query timeout (10s)')), 10000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Dictionary query timeout (20s)')), 20000))
         ]);
         data = result.data;
         error = result.error;
@@ -1216,22 +1216,28 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(e) { console.error('[AWorded] CRASH at pre-load setup:', e); }
         console.log('[AWorded] pre-load setup done, calling loadDictionaries...');
 // *** ლექსიკონების და მონაცემების ჩატვირთვა ბაზიდან ***
-        try {
-            await loadDictionaries();
-            console.log('[AWorded] Dictionaries loaded, currentDictionaryId:', currentDictionaryId);
-        } catch (e) {
-            console.error('[AWorded] loadDictionaries failed:', e);
+        // Retry loadDictionaries up to 3 times with increasing delay
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                await loadDictionaries();
+                console.log('[AWorded] Dictionaries loaded (attempt ' + attempt + '), currentDictionaryId:', currentDictionaryId);
+            } catch (e) {
+                console.error('[AWorded] loadDictionaries failed (attempt ' + attempt + '):', e);
+            }
+            if (currentDictionaryId) break;
+            console.warn('[AWorded] No dictionary ID after attempt ' + attempt + ', retrying in ' + (attempt * 2) + 's...');
+            await new Promise(r => setTimeout(r, attempt * 2000));
         }
-        if (!currentDictionaryId) {
-            console.warn('[AWorded] No dictionary ID after loadDictionaries, retrying...');
-            await new Promise(r => setTimeout(r, 1500));
-            try { await loadDictionaries(); } catch(e) {}
-        }
-        try {
-            await loadDataFromSupabase();
-            console.log('[AWorded] Data loaded, cards:', document.querySelectorAll('.card').length);
-        } catch (e) {
-            console.error('[AWorded] loadDataFromSupabase failed:', e);
+        if (currentDictionaryId) {
+            try {
+                await loadDataFromSupabase();
+                console.log('[AWorded] Data loaded, cards:', document.querySelectorAll('.card').length);
+            } catch (e) {
+                console.error('[AWorded] loadDataFromSupabase failed:', e);
+            }
+        } else {
+            console.error('[AWorded] Failed to load dictionaries after 3 attempts');
+            showToast('მონაცემების ჩატვირთვა ვერ მოხერხდა. გადატვირთეთ გვერდი.', 'error');
         }
 // Dictionary switching
         const dictionarySelect = document.getElementById('dictionarySelect');
@@ -2099,18 +2105,18 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==== 3d. აპლიკაციის გაშვება (Auth Check) ====
 // ==== 3d. აპლიკაციის გაშვება (Auth Check) ====
 // ==== 3d. აპლიკაციის გაშვება (Auth Check) ====
+    let initPromise = null; // Prevent parallel initializeApp calls
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
-        console.log('[AWorded] authStateChange:', event, 'session:', !!session);
+        console.log('[AWorded] authStateChange:', event, 'session:', !!session, 'isInit:', isAppInitialized);
         if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN')) {
             currentUser = session.user;
-            if (!isAppInitialized) {
+            if (!isAppInitialized && !initPromise) {
                 isAppInitialized = true;
-                try {
-                    await initializeApp();
-                } catch (e) {
+                initPromise = initializeApp().catch(e => {
                     console.error('[AWorded] initializeApp crashed:', e);
-                    isAppInitialized = false; // Allow retry
-                }
+                    isAppInitialized = false;
+                }).finally(() => { initPromise = null; });
+                await initPromise;
             }
         } else if (event === 'SIGNED_OUT') {
             currentUser = null;
@@ -2123,8 +2129,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fallback: if onAuthStateChange didn't fire or initializeApp failed
     setTimeout(async () => {
-        console.log('[AWorded] Fallback check: isAppInitialized=', isAppInitialized, 'currentUser=', !!currentUser);
-        if (!isAppInitialized) {
+        console.log('[AWorded] Fallback check: isAppInitialized=', isAppInitialized, 'currentUser=', !!currentUser, 'cards:', document.querySelectorAll('.card').length);
+        // Also retry if initialized but no cards loaded (Supabase was slow)
+        if (!isAppInitialized || (isAppInitialized && currentUser && document.querySelectorAll('.card').length === 0 && !currentDictionaryId)) {
             try {
                 const { data: { session } } = await supabaseClient.auth.getSession();
                 if (session) {
