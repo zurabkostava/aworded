@@ -523,7 +523,8 @@ async function showNotificationWithCard(notif) {
             type: 'SHOW_NOTIFICATION',
             title,
             body,
-            icon: './icons/logo.svg'
+            icon: './icons/logo.svg',
+            tag: `aworded-${notif.id || 'reminder'}`
         });
     } else if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(title, { body, icon: './icons/logo.svg', tag: 'aworded-reminder' });

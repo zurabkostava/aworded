@@ -1,5 +1,5 @@
 // ==== sw.js - AWorded Service Worker (Push Notifications) ====
-const SW_VERSION = 7;
+const SW_VERSION = 8;
 
 self.addEventListener('install', () => {
     self.skipWaiting();
@@ -43,7 +43,7 @@ self.addEventListener('message', (event) => {
             body: data.body || '',
             icon: data.icon || './icons/logo.svg',
             badge: './icons/logo.svg',
-            tag: 'aworded-reminder',
+            tag: data.tag || 'aworded-reminder',
             renotify: true
         });
     }
