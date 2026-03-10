@@ -26,7 +26,7 @@ function urlBase64ToUint8Array(base64String) {
 
 // ==== Web Push Subscription ====
 
-async function subscribeToPush() {
+async function subscribeToPush(forceNew = false) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         console.warn('[Push] Not supported');
         return false;
@@ -34,42 +34,49 @@ async function subscribeToPush() {
 
     try {
         const reg = await navigator.serviceWorker.ready;
-
-        // Check existing subscription
         let subscription = await reg.pushManager.getSubscription();
 
-        if (!subscription) {
-            // Request permission
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                console.warn('[Push] Permission denied');
-                return false;
-            }
+        // Unsubscribe if forced or subscription is dead
+        if (subscription && (forceNew || subscription.endpoint.includes('permanently-removed'))) {
+            await subscription.unsubscribe();
+            subscription = null;
+        }
 
-            // Subscribe
+        if (!subscription) {
+            if (Notification.permission !== 'granted') {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    console.warn('[Push] Permission denied');
+                    return false;
+                }
+            }
             subscription = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
             });
         }
 
-        // Save subscription to Supabase
-        const key = subscription.toJSON();
+        // Save to Supabase
         if (typeof supabaseClient !== 'undefined' && typeof currentUser !== 'undefined' && currentUser) {
-            const { error } = await supabaseClient
-                .from('push_subscriptions')
-                .upsert({
+            const key = subscription.toJSON();
+            if (forceNew) {
+                // Delete all old subs for this user, insert fresh one
+                await supabaseClient.from('push_subscriptions').delete().eq('user_id', currentUser.id);
+                await supabaseClient.from('push_subscriptions').insert({
+                    user_id: currentUser.id,
+                    endpoint: key.endpoint,
+                    p256dh: key.keys.p256dh,
+                    auth: key.keys.auth
+                });
+            } else {
+                await supabaseClient.from('push_subscriptions').upsert({
                     user_id: currentUser.id,
                     endpoint: key.endpoint,
                     p256dh: key.keys.p256dh,
                     auth: key.keys.auth
                 }, { onConflict: 'user_id,endpoint' });
-
-            if (error) {
-                console.error('[Push] Save subscription error:', error.message);
-            } else {
-                console.log('[Push] Subscription saved to Supabase');
             }
+            console.log('[Push] Subscription saved');
         }
 
         return true;
@@ -420,8 +427,8 @@ async function initNotificationUI() {
                 }
             }
 
-            // Subscribe to push
-            const subscribed = await subscribeToPush();
+            // Force fresh subscription (deletes old expired ones)
+            const subscribed = await subscribeToPush(true);
             info += ` | Subscribed: ${subscribed}`;
             if (debugEl) debugEl.textContent = info;
 
