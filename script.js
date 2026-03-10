@@ -1003,19 +1003,37 @@ function renderDictionaryDropdown() {
     });
 }
 
-async function loadDataFromSupabase() {
+async function loadDataFromSupabase(retryCount = 0) {
     if (!currentUser) return;
     if (currentUser.id === 'offline-user') return; // Skip DB calls in offline mode
 // 1. ვიღებთ *ყველა* მონაცემს პარალელურად
-    const [cardsResponse, tagsResponse, relationsResponse] = await Promise.all([
-        supabaseClient.from('cards').select('*').eq('user_id', currentUser.id).eq('dictionary_id', currentDictionaryId),
-        supabaseClient.from('tags').select('*').eq('user_id', currentUser.id),
-        supabaseClient.from('card_tags').select('*') // user_id-ს RLS პოლისი ამოწმებს
-    ]);
+    let cardsResponse, tagsResponse, relationsResponse;
+    try {
+        [cardsResponse, tagsResponse, relationsResponse] = await Promise.all([
+            supabaseClient.from('cards').select('*').eq('user_id', currentUser.id).eq('dictionary_id', currentDictionaryId),
+            supabaseClient.from('tags').select('*').eq('user_id', currentUser.id),
+            supabaseClient.from('card_tags').select('*') // user_id-ს RLS პოლისი ამოწმებს
+        ]);
+    } catch (networkError) {
+        if (retryCount < 2) {
+            console.warn(`Network error loading data, retrying (${retryCount + 1})...`);
+            await new Promise(r => setTimeout(r, 1500));
+            return loadDataFromSupabase(retryCount + 1);
+        }
+        showToast('ქსელის შეცდომა. გადატვირთეთ გვერდი.', 'error');
+        return;
+    }
 // შეცდომების დამუშავება
-    if (cardsResponse.error) return showToast(`Error loading cards: ${cardsResponse.error.message}`, "error");
-    if (tagsResponse.error) return showToast(`Error loading tags: ${tagsResponse.error.message}`, "error");
-    if (relationsResponse.error) return showToast(`Error loading relations: ${relationsResponse.error.message}`, "error");
+    if (cardsResponse.error || tagsResponse.error || relationsResponse.error) {
+        const errMsg = cardsResponse.error?.message || tagsResponse.error?.message || relationsResponse.error?.message;
+        if (retryCount < 2) {
+            console.warn(`Error loading data, retrying (${retryCount + 1})...`);
+            await new Promise(r => setTimeout(r, 1500));
+            return loadDataFromSupabase(retryCount + 1);
+        }
+        showToast(`Error loading data: ${errMsg}`, "error");
+        return;
+    }
     const cards = cardsResponse.data;
     const tags = tagsResponse.data;
     const relations = relationsResponse.data;
@@ -1070,6 +1088,17 @@ async function deleteCard(card) {
     }
 }
 document.addEventListener('DOMContentLoaded', () => {
+// ==== EARLY: Dark mode applied immediately before auth ====
+    {
+        const savedTheme = localStorage.getItem("theme");
+        const logoEl = document.getElementById("appLogo");
+        const toggleBtn = document.getElementById("toggleDarkModeBtn");
+        if (savedTheme === "dark") {
+            document.body.classList.add("dark");
+            if (toggleBtn) toggleBtn.innerHTML = `<i class="fas fa-sun"></i>`;
+            if (logoEl) logoEl.data = "/icons/logo-dark.svg";
+        }
+    }
 // ==== 3a. DOM ელემენტების შენახვა ცვლადებში ====
     const authContainer = document.getElementById('authContainer');
     const mainAppContainer = document.getElementById('mainAppContainer');
@@ -2051,4 +2080,20 @@ document.addEventListener('DOMContentLoaded', () => {
             showAuthScreen(); // ესეც დაანულებს
         }
     });
+
+    // Fallback: if onAuthStateChange didn't fire INITIAL_SESSION within 3 seconds, check manually
+    setTimeout(async () => {
+        if (!isAppInitialized && !currentUser) {
+            try {
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (session && !isAppInitialized) {
+                    currentUser = session.user;
+                    isAppInitialized = true;
+                    await initializeApp();
+                }
+            } catch (e) {
+                console.warn('Fallback session check failed:', e);
+            }
+        }
+    }, 3000);
 });
