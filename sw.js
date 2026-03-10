@@ -1,5 +1,6 @@
 // ==== sw.js - AWorded Service Worker (Push Notifications) ====
-const SW_VERSION = 8;
+const SW_VERSION = 9;
+const SUPABASE_PUSH_URL = 'https://wdgvxerfxwtmpqztwgtj.supabase.co/functions/v1/get-push-notification';
 
 self.addEventListener('install', () => {
     self.skipWaiting();
@@ -15,23 +16,33 @@ self.addEventListener('activate', (event) => {
 
 // ==== Push Notification Handler ====
 self.addEventListener('push', (event) => {
-    let data = { title: 'AWorded', body: '' };
-    try {
-        data = event.data.json();
-    } catch {
-        data.body = event.data ? event.data.text() : '';
-    }
+    event.waitUntil((async () => {
+        let title = 'AWorded';
+        let body = 'დროა ისწავლო!';
 
-    event.waitUntil(
-        self.registration.showNotification(data.title || 'AWorded', {
-            body: data.body || '',
+        try {
+            // Get own push endpoint to identify ourselves
+            const sub = await self.registration.pushManager.getSubscription();
+            if (sub) {
+                const res = await fetch(`${SUPABASE_PUSH_URL}?endpoint=${encodeURIComponent(sub.endpoint)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    title = data.title || title;
+                    body = data.body || body;
+                }
+            }
+        } catch (e) {
+            console.error('[SW] Failed to fetch push content:', e);
+        }
+
+        return self.registration.showNotification(title, {
+            body,
             icon: './icons/logo.svg',
             badge: './icons/logo.svg',
-            tag: data.tag || 'aworded-push',
+            tag: 'aworded-push',
             renotify: true,
-            data: data
-        })
-    );
+        });
+    })());
 });
 
 // ==== Message Handler (for direct notifications from page) ====

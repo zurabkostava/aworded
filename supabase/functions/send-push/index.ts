@@ -1,5 +1,5 @@
 // Supabase Edge Function: send-push
-// Uses native fetch + VAPID JWT for Web Push
+// Stores notification in push_queue, sends empty push trigger via VAPID
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -8,7 +8,6 @@ const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-// Base64URL encode/decode helpers
 function base64UrlEncode(data: Uint8Array): string {
   return btoa(String.fromCharCode(...data))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -23,79 +22,53 @@ function base64UrlDecode(str: string): Uint8Array {
   return bytes
 }
 
-// Create VAPID JWT
 async function createVapidJwt(audience: string): Promise<string> {
   const header = { typ: 'JWT', alg: 'ES256' }
   const now = Math.floor(Date.now() / 1000)
-  const payload = {
-    aud: audience,
-    exp: now + 86400,
-    sub: 'mailto:zurabkostava1@gmail.com'
-  }
+  const payload = { aud: audience, exp: now + 86400, sub: 'mailto:zurabkostava1@gmail.com' }
 
   const headerB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(header)))
   const payloadB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)))
   const unsigned = `${headerB64}.${payloadB64}`
 
-  // Import the VAPID private key
-  const privateKeyBytes = base64UrlDecode(VAPID_PRIVATE_KEY)
-  // Build JWK for P-256
+  // Extract x/y from uncompressed public key (0x04 + x(32) + y(32))
+  const pubKeyBytes = base64UrlDecode(VAPID_PUBLIC_KEY)
   const jwk = {
-    kty: 'EC',
-    crv: 'P-256',
+    kty: 'EC', crv: 'P-256',
     d: VAPID_PRIVATE_KEY,
-    x: VAPID_PUBLIC_KEY.substring(0, 43),
-    y: VAPID_PUBLIC_KEY.substring(43),
+    x: base64UrlEncode(pubKeyBytes.slice(1, 33)),
+    y: base64UrlEncode(pubKeyBytes.slice(33, 65)),
   }
 
-  const key = await crypto.subtle.importKey(
-    'jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']
-  )
+  const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(unsigned)))
 
-  const signature = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    key,
-    new TextEncoder().encode(unsigned)
-  )
-
-  // Convert from DER to raw r||s format if needed
-  const sig = new Uint8Array(signature)
-  let r: Uint8Array, s: Uint8Array
-
+  let rawSig: Uint8Array
   if (sig.length === 64) {
-    // Already raw format
-    r = sig.slice(0, 32)
-    s = sig.slice(32)
+    rawSig = sig
   } else {
-    // DER format - extract r and s
-    r = sig.slice(0, 32)
-    s = sig.slice(32, 64)
+    // Parse DER format
+    rawSig = new Uint8Array(64)
+    let o = 2
+    o++; const rLen = sig[o++]; const rBytes = sig.slice(o, o + rLen); o += rLen
+    o++; const sLen = sig[o++]; const sBytes = sig.slice(o, o + sLen)
+    rLen <= 32 ? rawSig.set(rBytes, 32 - rLen) : rawSig.set(rBytes.slice(rLen - 32), 0)
+    sLen <= 32 ? rawSig.set(sBytes, 64 - sLen) : rawSig.set(sBytes.slice(sLen - 32), 32)
   }
-
-  const rawSig = new Uint8Array(64)
-  rawSig.set(r)
-  rawSig.set(s, 32)
 
   return `${unsigned}.${base64UrlEncode(rawSig)}`
 }
 
-async function sendPushNotification(
-  sub: { endpoint: string; p256dh: string; auth: string },
-  payload: string
-): Promise<boolean> {
-  const url = new URL(sub.endpoint)
+async function sendEmptyPush(endpoint: string): Promise<void> {
+  const url = new URL(endpoint)
   const audience = `${url.protocol}//${url.host}`
-
   const jwt = await createVapidJwt(audience)
-  const vapidKeyBytes = base64UrlDecode(VAPID_PUBLIC_KEY)
 
-  const response = await fetch(sub.endpoint, {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/octet-stream',
       'TTL': '86400',
       'Authorization': `vapid t=${jwt}, k=${VAPID_PUBLIC_KEY}`,
-      'Content-Length': '0',
     },
   })
 
@@ -103,21 +76,18 @@ async function sendPushNotification(
     const text = await response.text()
     throw new Error(`${response.status}: ${text}`)
   }
-
-  return true
 }
 
 Deno.serve(async (_req) => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    // Get current time in Tbilisi timezone (UTC+4)
+    // Tbilisi time (UTC+4)
     const now = new Date()
     const tbilisi = new Date(now.getTime() + 4 * 60 * 60 * 1000)
     const currentDay = tbilisi.getUTCDay()
     const currentTime = `${String(tbilisi.getUTCHours()).padStart(2, '0')}:${String(tbilisi.getUTCMinutes()).padStart(2, '0')}`
 
-    // Get matching schedules
     const { data: schedules, error } = await supabase
       .from('notification_schedules')
       .select('*')
@@ -125,18 +95,12 @@ Deno.serve(async (_req) => {
       .eq('time', currentTime)
       .contains('days', [currentDay])
 
-    if (error) {
-      return Response.json({ error: error.message }, { status: 500 })
-    }
-
-    if (!schedules?.length) {
-      return Response.json({ message: 'No notifications', time: currentTime, day: currentDay })
-    }
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    if (!schedules?.length) return Response.json({ message: 'No notifications', time: currentTime, day: currentDay })
 
     let sent = 0, errors = 0
 
     for (const schedule of schedules) {
-      // Get random card
       let title = 'AWorded', body = 'დროა ისწავლო!'
 
       try {
@@ -158,7 +122,12 @@ Deno.serve(async (_req) => {
         }
       } catch { /* use defaults */ }
 
-      // Get push subscriptions
+      // Store notification in queue for SW to fetch
+      await supabase.from('push_queue').insert({ user_id: schedule.user_id, title, body })
+
+      // Clean up expired entries
+      await supabase.from('push_queue').delete().lt('expires_at', now.toISOString())
+
       const { data: subs } = await supabase
         .from('push_subscriptions')
         .select('*')
@@ -168,10 +137,7 @@ Deno.serve(async (_req) => {
 
       for (const sub of subs) {
         try {
-          await sendPushNotification(
-            { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
-            JSON.stringify({ title, body, tag: `aworded-${schedule.id}` })
-          )
+          await sendEmptyPush(sub.endpoint)
           sent++
         } catch (err: unknown) {
           errors++
