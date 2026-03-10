@@ -2075,45 +2075,40 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==== 3d. აპლიკაციის გაშვება (Auth Check) ====
 // ==== 3d. აპლიკაციის გაშვება (Auth Check) ====
 // ==== 3d. აპლიკაციის გაშვება (Auth Check) ====
-    let initPromise = null; // Prevent parallel initializeApp calls
-    supabaseClient.auth.onAuthStateChange(async (event, session) => {
-        console.log('[AWorded] authStateChange:', event, 'session:', !!session, 'isInit:', isAppInitialized);
-        if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN')) {
-            currentUser = session.user;
-            if (!isAppInitialized && !initPromise) {
+    // Use getSession() directly — more reliable than onAuthStateChange for initial load
+    async function startApp() {
+        console.log('[AWorded] startApp: checking session...');
+        try {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            console.log('[AWorded] startApp: session:', !!session);
+            if (session) {
+                currentUser = session.user;
                 isAppInitialized = true;
-                initPromise = initializeApp().catch(e => {
-                    console.error('[AWorded] initializeApp crashed:', e);
-                    isAppInitialized = false;
-                }).finally(() => { initPromise = null; });
-                await initPromise;
+                await initializeApp();
+            } else {
+                showAuthScreen();
             }
+        } catch (e) {
+            console.error('[AWorded] startApp failed:', e);
+            showAuthScreen();
+        }
+    }
+
+    // Listen for auth changes AFTER initial load (login, logout, token refresh)
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        console.log('[AWorded] authStateChange:', event, 'session:', !!session);
+        if (event === 'SIGNED_IN' && !isAppInitialized) {
+            // User just logged in from the auth screen
+            currentUser = session.user;
+            isAppInitialized = true;
+            await initializeApp();
         } else if (event === 'SIGNED_OUT') {
             currentUser = null;
-            showAuthScreen();
-        } else if (!session) {
-            currentUser = null;
+            isAppInitialized = false;
             showAuthScreen();
         }
     });
 
-    // Fallback: if onAuthStateChange didn't fire or initializeApp failed
-    setTimeout(async () => {
-        console.log('[AWorded] Fallback check: isAppInitialized=', isAppInitialized, 'currentUser=', !!currentUser, 'cards:', document.querySelectorAll('.card').length);
-        // Also retry if initialized but no cards loaded (Supabase was slow)
-        if (!isAppInitialized || (isAppInitialized && currentUser && document.querySelectorAll('.card').length === 0 && !currentDictionaryId)) {
-            try {
-                const { data: { session } } = await supabaseClient.auth.getSession();
-                if (session) {
-                    currentUser = session.user;
-                    isAppInitialized = true;
-                    await initializeApp();
-                } else {
-                    showAuthScreen();
-                }
-            } catch (e) {
-                console.warn('[AWorded] Fallback session check failed:', e);
-            }
-        }
-    }, 3000);
+    // Start the app
+    await startApp();
 });
