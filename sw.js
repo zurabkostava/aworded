@@ -1,5 +1,6 @@
 // ==== sw.js - AWorded Service Worker ====
-const SW_VERSION = 2;
+const SW_VERSION = 3;
+const CACHE_NAME = 'aworded-v3';
 
 let schedules = [];
 let checkInterval = null;
@@ -17,6 +18,31 @@ self.addEventListener('activate', (event) => {
         ).then(() => self.clients.claim())
     );
     startScheduleChecker();
+});
+
+// Network-first strategy: always fetch fresh, cache as fallback for offline
+self.addEventListener('fetch', (event) => {
+    const url = new URL(event.request.url);
+
+    // Only handle same-origin requests (our app files)
+    if (url.origin !== self.location.origin) return;
+
+    // Skip non-GET requests
+    if (event.request.method !== 'GET') return;
+
+    event.respondWith(
+        fetch(event.request).then(response => {
+            // Cache the fresh response for offline fallback
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => {
+                cache.put(event.request, clone);
+            });
+            return response;
+        }).catch(() => {
+            // Network failed, try cache
+            return caches.match(event.request);
+        })
+    );
 });
 
 self.addEventListener('message', (event) => {
