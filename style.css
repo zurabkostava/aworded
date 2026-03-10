@@ -926,7 +926,50 @@ body.dark #toggleDarkModeBtn:hover {
 
 }
 
+#dictionarySelect {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: #fff;
+    font-size: 0.85rem;
+    cursor: pointer;
+    max-width: 200px;
+    outline: none;
+}
 
+.dark #dictionarySelect {
+    background: #2a2a2a;
+    color: #eee;
+    border-color: #555;
+}
+
+#addDictionaryBtn {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: #666;
+    font-size: 0.85rem;
+    transition: background 0.2s, color 0.2s;
+}
+
+#addDictionaryBtn:hover {
+    background: #4CAF50;
+    color: #fff;
+    border-color: #4CAF50;
+}
+
+.dark #addDictionaryBtn {
+    color: #aaa;
+    border-color: #555;
+}
+
+.dark #addDictionaryBtn:hover {
+    background: #4CAF50;
+    color: #fff;
+    border-color: #4CAF50;
+}
 
 .top-center {
 
@@ -2185,17 +2228,19 @@ textarea {
 
 
 .close-button {
-
     font-size: 1.5rem;
-
     background: transparent;
-
     border: none;
-
     color: #888;
-
     cursor: pointer;
+    padding: 0 5px; /* დავამატეთ დაშორება */
+    line-height: 1; /* გავასწორეთ სიმაღლე */
+}
 
+/* ახალი "მინუს" ღილაკის სტილი */
+#minimizePlayerBtn.close-button {
+    font-size: 1.2rem; /* ცოტა დავაპატარავეთ, რომ "X"-ზე ნაკლები იყოს */
+    padding-right: 10px; /* დაშორება "X"-მდე */
 }
 
 
@@ -4542,6 +4587,12 @@ textarea {
 
     .top-left{
 
+        display: flex;
+
+    }
+
+    .top-left #appLogo {
+
         display: none;
 
     }
@@ -5326,3 +5377,332 @@ body.dark .card-tag-more {
     background-color: #333;
     color: #aaa;
 }
+
+/* ==== Player Minimize/Restore Styles (FIXED LOCATION & STYLE) ==== */
+#minimizePlayerBtn {
+    /* (არაფერი განსაკუთრებული, სტანდარტული ღილაკია) */
+}
+
+.player-minimized-display {
+    position: fixed;
+    /* === NEW LOCATION: Player-ის ზემოთ, ცენტრში === */
+    bottom: 70px; /* 10px (base) + ~50px (player height) + 10px (gap) */
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto; /* ვაუქმებთ ძველ right: 20px-ს */
+    /* === END NEW LOCATION === */
+
+    z-index: 999999998;
+
+    /* === NEW STYLE: "More Noticeable" === */
+    background-color: #ffffff;
+    border: 1px solid #0077cc; /* ლურჯი ჩარჩო */
+    border-radius: 12px;
+    padding: 12px 18px; /* ცოტა გავადიდეთ */
+    box-shadow: 0 4px 15px rgba(0,119,204, 0.4); /* ლურჯი "გლოუ" */
+    animation: pulse-glow 2s infinite alternate;
+    /* === END NEW STYLE === */
+
+    cursor: pointer;
+    font-size: 1rem; /* ცოტა გავადიდეთ */
+    transition: all 0.2s ease;
+}
+.player-minimized-display:hover {
+    background-color: #f0f0f0;
+    transform: translateX(-50%) scale(1.03); /* ვინარჩუნებთ transform-ს */
+}
+
+.player-minimized-display strong {
+    color: #0077cc;
+}
+
+body.dark .player-minimized-display {
+    background-color: #2a2a2a;
+    border-color: #4fc3f7; /* ღია ლურჯი ჩარჩო */
+    box-shadow: 0 4px 15px rgba(79,195,247, 0.3); /* ღია ლურჯი "გლოუ" */
+}
+
+body.dark .player-minimized-display:hover {
+    background-color: #333;
+}
+
+body.dark .player-minimized-display strong {
+    color: #4fc3f7;
+}
+
+/* === NEW ANIMATION === */
+@keyframes pulse-glow {
+    from {
+        box-shadow: 0 4px 15px rgba(0,119,204, 0.3);
+    }
+    to {
+        box-shadow: 0 4px 25px rgba(0,119,204, 0.5);
+    }
+}
+
+body.dark @keyframes pulse-glow {
+              from {
+                  box-shadow: 0 4px 15px rgba(79,195,247, 0.2);
+              }
+              to {
+                  box-shadow: 0 4px 25px rgba(79,195,247, 0.4);
+              }
+          }
+/* === END NEW ANIMATION === */
+
+/* === NOTIFICATION STYLES === */
+
+.notif-item {
+    background: #f5f5f5;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+    border: 1px solid #e0e0e0;
+}
+
+.dark .notif-item {
+    background: #2a2a2a;
+    border-color: #444;
+}
+
+.notif-item-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.notif-time {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #0077cc;
+    min-width: 55px;
+}
+
+.dark .notif-time {
+    color: #4fc3f7;
+}
+
+.notif-days {
+    font-size: 0.8rem;
+    color: #666;
+    flex: 1;
+}
+
+.dark .notif-days {
+    color: #aaa;
+}
+
+.notif-item-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: #888;
+}
+
+.notif-item-details span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.notif-edit-btn,
+.notif-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.notif-edit-btn {
+    color: #0077cc;
+}
+
+.notif-edit-btn:hover {
+    background: rgba(0, 119, 204, 0.1);
+}
+
+.dark .notif-edit-btn {
+    color: #4fc3f7;
+}
+
+.notif-delete-btn {
+    color: #cc3333;
+}
+
+.notif-delete-btn:hover {
+    background: rgba(204, 51, 51, 0.1);
+}
+
+/* Toggle switch */
+.notif-toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    display: inline-block;
+}
+
+.notif-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.notif-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    border-radius: 22px;
+    transition: 0.3s;
+}
+
+.notif-toggle-slider:before {
+    content: "";
+    position: absolute;
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+.notif-toggle input:checked + .notif-toggle-slider {
+    background-color: #4CAF50;
+}
+
+.notif-toggle input:checked + .notif-toggle-slider:before {
+    transform: translateX(18px);
+}
+
+/* Add form */
+.notif-add-form {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.dark .notif-add-form {
+    background: #1e1e1e;
+    border-color: #444;
+}
+
+.notif-add-form h3 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+}
+
+.notif-form-row {
+    margin-bottom: 12px;
+}
+
+.notif-form-row label {
+    display: block;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+    color: #555;
+}
+
+.dark .notif-form-row label {
+    color: #bbb;
+}
+
+.notif-form-row input[type="time"],
+.notif-form-row input[type="text"],
+.notif-form-row select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+    background: #fff;
+}
+
+.dark .notif-form-row input[type="time"],
+.dark .notif-form-row input[type="text"],
+.dark .notif-form-row select {
+    background: #2a2a2a;
+    color: #eee;
+    border-color: #555;
+}
+
+.notif-form-row select[multiple] {
+    min-height: 70px;
+}
+
+/* Weekday buttons */
+.notif-weekdays {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.weekday-btn {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s;
+    color: #333;
+}
+
+.dark .weekday-btn {
+    background: #2a2a2a;
+    color: #ccc;
+    border-color: #555;
+}
+
+.weekday-btn.active {
+    background: #0077cc;
+    color: #fff;
+    border-color: #0077cc;
+}
+
+.dark .weekday-btn.active {
+    background: #4fc3f7;
+    color: #111;
+    border-color: #4fc3f7;
+}
+
+.notif-form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.notif-form-actions button {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+#notifSaveBtn {
+    background: #4CAF50;
+    color: white;
+}
+
+#notifCancelBtn {
+    background: #eee;
+    color: #333;
+}
+
+.dark #notifCancelBtn {
+    background: #333;
+    color: #ccc;
+}
+
+/* === END NOTIFICATION STYLES === */

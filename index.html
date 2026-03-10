@@ -32,6 +32,7 @@
     <script defer="" src="games/puzzle.js">
     </script>
     <script src="tts.js"></script>
+    <script defer src="notifications.js"></script>
 
 
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
@@ -62,6 +63,7 @@
             <button id="loginBtn">შესვლა</button>
             <button id="registerBtn">რეგისტრაცია</button>
         </div>
+        <button id="skipAuthBtn" style="margin-top:12px;padding:8px 24px;background:#e67e22;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Skip Login (Offline)</button>
         <div class="auth-message" id="authMessage"></div>
     </div>
 </div>
@@ -70,6 +72,8 @@
         <div class="top-bar">
             <div class="top-left">
                 <object id="appLogo" data="/icons/logo.svg" type="image/svg+xml"></object>
+                <select id="dictionarySelect"></select>
+                <button id="addDictionaryBtn" title="ახალი ლექსიკონი"><i class="fas fa-plus"></i></button>
             </div>
             <div class="top-center">
 
@@ -142,7 +146,10 @@
                 </div>
             </div>
             <div class="toolbar-right">
-
+                <button class="toolbar-btn" id="notificationsBtn" title="შეხსენებები">
+                    <i class="fas fa-bell"></i>
+                    შეხსენებები
+                </button>
                 <button class="toolbar-btn" id="statsBtn" title="სტატისტიკა">
                     <i class="fas fa-chart-pie">
                     </i>
@@ -266,6 +273,8 @@
         </button>
         <div class="modal preview-modal">
             <div class="modal-actions close-modal">
+                <button class="close-button" id="minimizePlayerBtn" title="ჩაკეცვა">
+                    <i class="fas fa-minus"></i> </button>
                 <button class="close-button" id="closePreviewBtn">
                     ×
                 </button>
@@ -509,6 +518,8 @@
             </button>
         </div>
     </div>
+    <div class="player-minimized-display" id="playerMinimizedDisplay" style="display: none;" title="გახსნა">
+    </div>
     <button class="mobile-toggle-btn" id="showTopBtn">
         <i class="fas fa-sliders">
         </i>
@@ -587,14 +598,59 @@
     </div>
 
     <div class="modal-overlay" id="notificationsModal" style="display:none; z-index: 99999;">
-        <div class="modal" style="max-width:500px;">
+        <div class="modal" style="max-width:550px;">
             <div class="modal-actions close-modal">
-                <button class="close-button" id="closeNotificationsModalBtn">×</button>
+                <button class="close-button" id="closeNotificationsModalBtn">&times;</button>
             </div>
-            <h2>შეხსენებები</h2>
+            <h2><i class="fas fa-bell"></i> შეხსენებები</h2>
 
             <div id="notificationListContainer">
-                <p style="text-align: center; color: #888;">შეხსენებები არ გაქვთ.</p>
+                <p class="notif-empty" style="text-align: center; color: #888;">შეხსენებები არ გაქვთ.</p>
+            </div>
+
+            <div class="notif-add-form" id="notifAddForm" style="display:none;">
+                <h3>ახალი შეხსენება</h3>
+                <div class="notif-form-row">
+                    <label>დრო:</label>
+                    <input type="time" id="notifTimeInput" value="12:00">
+                </div>
+                <div class="notif-form-row">
+                    <label>დღეები:</label>
+                    <div class="notif-weekdays" id="notifWeekdays">
+                        <button type="button" class="weekday-btn" data-day="1">ორშ</button>
+                        <button type="button" class="weekday-btn" data-day="2">სამ</button>
+                        <button type="button" class="weekday-btn" data-day="3">ოთხ</button>
+                        <button type="button" class="weekday-btn" data-day="4">ხუთ</button>
+                        <button type="button" class="weekday-btn" data-day="5">პარ</button>
+                        <button type="button" class="weekday-btn" data-day="6">შაბ</button>
+                        <button type="button" class="weekday-btn" data-day="0">კვი</button>
+                    </div>
+                </div>
+                <div class="notif-form-row">
+                    <label>ლექსიკონი:</label>
+                    <select id="notifDictSelect"></select>
+                </div>
+                <div class="notif-form-row">
+                    <label>თეგები (არასავალდებულო):</label>
+                    <select id="notifTagSelect" multiple></select>
+                </div>
+                <div class="notif-form-row">
+                    <label>პროგრესი:</label>
+                    <select id="notifProgressSelect">
+                        <option value="">გლობალური (ყველა)</option>
+                        <option value="0-99">ყველა (100%-ის გარეშე)</option>
+                        <option value="0-30">0% - 30%</option>
+                        <option value="31-50">31% - 50%</option>
+                        <option value="51-70">51% - 70%</option>
+                        <option value="71-80">71% - 80%</option>
+                        <option value="81-99">81% - 99%</option>
+                        <option value="100-100">ნასწავლი (100%)</option>
+                    </select>
+                </div>
+                <div class="notif-form-actions">
+                    <button id="notifSaveBtn"><i class="fas fa-check"></i> შენახვა</button>
+                    <button id="notifCancelBtn"><i class="fas fa-times"></i> გაუქმება</button>
+                </div>
             </div>
 
             <div class="modal-actions" style="margin-top: 20px;">

@@ -10,27 +10,16 @@ let selectedGeorgianVoice = null;
 let isSpeaking = false;
 let lastSpokenButton = null;
 
-const allowedVoicesEnglish = [
-    "Microsoft AndrewMultilingual Online (Natural) - English (United States)",
-    "Microsoft AvaMultilingual Online (Natural) - English (United States)",
-    "Microsoft BrianMultilingual Online (Natural) - English (United States)",
-    "Microsoft EmmaMultilingual Online (Natural) - English (United States)",
-    "Microsoft Libby Online (Natural) - English (United Kingdom)",
-    "Microsoft Maisie Online (Natural) - English (United Kingdom)",
-    "Microsoft Ryan Online (Natural) - English (United Kingdom)",
-    "Microsoft Sonia Online (Natural) - English (United Kingdom)",
-    "Microsoft Thomas Online (Natural) - English (United Kingdom)",
-    "Microsoft Ana Online (Natural) - English (United States)"
-];
+function getEnglishVoices() {
+    return speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
+}
 
-const allowedVoicesGeorgian = [
-    "Microsoft Giorgi Online (Natural) - Georgian (Georgia)",
-    "Microsoft Eka Online (Natural) - Georgian (Georgia)",
-    "Microsoft AndrewMultilingual Online (Natural) - English (United States)",
-    "Microsoft AvaMultilingual Online (Natural) - English (United States)",
-    "Microsoft BrianMultilingual Online (Natural) - English (United States)",
-    "Microsoft EmmaMultilingual Online (Natural) - English (United States)"
-];
+function getGeorgianVoices() {
+    const voices = speechSynthesis.getVoices();
+    const georgian = voices.filter(v => v.lang.startsWith('ka'));
+    const multilingual = voices.filter(v => v.name.toLowerCase().includes('multilingual') && !v.lang.startsWith('ka'));
+    return [...georgian, ...multilingual];
+}
 
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -45,44 +34,36 @@ function loadSpeechRates() {
 }
 
 function populateVoiceDropdown() {
-    const voices = speechSynthesis.getVoices();
     const voiceSelect = document.getElementById('voiceSelect');
-    if (!voiceSelect) return; // <-- დაცვის დამატება
+    if (!voiceSelect) return;
     voiceSelect.innerHTML = '';
 
-    allowedVoicesEnglish.forEach(name => {
-        const voice = voices.find(v => v.name === name);
-        if (voice) {
-            const option = document.createElement('option');
-            option.value = voice.name;
-            option.textContent = voice.name;
-            if (localStorage.getItem(VOICE_STORAGE_KEY) === voice.name) {
-                option.selected = true;
-                selectedVoice = voice;
-            }
-            voiceSelect.appendChild(option);
+    getEnglishVoices().forEach(voice => {
+        const option = document.createElement('option');
+        option.value = voice.name;
+        option.textContent = voice.name;
+        if (localStorage.getItem(VOICE_STORAGE_KEY) === voice.name) {
+            option.selected = true;
+            selectedVoice = voice;
         }
+        voiceSelect.appendChild(option);
     });
 }
 
 function populateGeorgianDropdown() {
-    const voices = speechSynthesis.getVoices();
     const geoSelect = document.getElementById('georgianVoiceSelect');
-    if (!geoSelect) return; // <-- დაცვის დამატება
+    if (!geoSelect) return;
     geoSelect.innerHTML = '';
 
-    allowedVoicesGeorgian.forEach(name => {
-        const voice = voices.find(v => v.name === name);
-        if (voice) {
-            const option = document.createElement('option');
-            option.value = voice.name;
-            option.textContent = voice.name;
-            if (localStorage.getItem(GEORGIAN_VOICE_KEY) === voice.name) {
-                option.selected = true;
-                selectedGeorgianVoice = voice;
-            }
-            geoSelect.appendChild(option);
+    getGeorgianVoices().forEach(voice => {
+        const option = document.createElement('option');
+        option.value = voice.name;
+        option.textContent = voice.name;
+        if (localStorage.getItem(GEORGIAN_VOICE_KEY) === voice.name) {
+            option.selected = true;
+            selectedGeorgianVoice = voice;
         }
+        geoSelect.appendChild(option);
     });
 }
 
