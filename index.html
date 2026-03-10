@@ -655,11 +655,15 @@
                 </div>
             </div>
 
-            <div class="modal-actions" style="margin-top: 20px;">
-                <button id="openAddNotificationModalBtn" style="background-color: #0077cc; color: white; width: 100%;">
+            <div class="modal-actions" style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="openAddNotificationModalBtn" style="background-color: #0077cc; color: white; flex: 1;">
                     <i class="fas fa-plus"></i> ახალი შეხსენების დამატება
                 </button>
+                <button id="testNotificationBtn" style="background-color: #28a745; color: white; flex: 0 0 auto; padding: 8px 16px;" title="ტესტი">
+                    <i class="fas fa-bell"></i> ტესტი
+                </button>
             </div>
+            <div id="notifDebugInfo" style="margin-top: 10px; font-size: 0.8rem; color: #888;"></div>
         </div>
     </div>
 

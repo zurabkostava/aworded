@@ -349,6 +349,41 @@ async function initNotificationUI() {
         showToast(notifData.id ? 'შეხსენება განახლდა' : 'შეხსენება დაემატა', 'success');
     };
 
+    // Test notification button
+    const testBtn = document.getElementById('testNotificationBtn');
+    if (testBtn) {
+        testBtn.onclick = async () => {
+            const debugEl = document.getElementById('notifDebugInfo');
+            const inIframe = isInIframe();
+            const swController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+            const notifSupported = 'Notification' in window;
+            const notifPermission = notifSupported ? Notification.permission : 'N/A';
+
+            let info = `iframe: ${inIframe} | SW: ${swController} | Notif API: ${notifSupported} | Permission: ${notifPermission}`;
+            if (debugEl) debugEl.textContent = info;
+            console.log('[Notif Test]', info);
+
+            // Request permission if needed
+            if (!inIframe && notifSupported && notifPermission === 'default') {
+                const result = await Notification.requestPermission();
+                info += ` | Requested: ${result}`;
+                if (debugEl) debugEl.textContent = info;
+                if (result !== 'granted') {
+                    showToast('ნოტიფიკაციის ნებართვა არ მოგეცათ', 'error');
+                    return;
+                }
+            }
+
+            // Try to show a test notification
+            await showNotificationWithCard({
+                dictionaryId: typeof currentDictionaryId !== 'undefined' ? currentDictionaryId : null,
+                tags: [],
+                progressRange: ''
+            });
+            showToast('ტესტ ნოტიფიკაცია გაიგზავნა!', 'success');
+        };
+    }
+
     // Request notification permission
     requestNotificationPermission();
 
