@@ -1,37 +1,46 @@
-// ==== sw.js - AWorded Service Worker (notifications only) ====
-const SW_VERSION = 6;
-
-let schedules = [];
-let checkInterval = null;
-let lastFiredKey = '';
+// ==== sw.js - AWorded Service Worker (Push Notifications) ====
+const SW_VERSION = 7;
 
 self.addEventListener('install', () => {
     self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-    // Clear all old caches and claim clients
     event.waitUntil(
         caches.keys().then(keys =>
             Promise.all(keys.map(key => caches.delete(key)))
         ).then(() => self.clients.claim())
     );
-    startScheduleChecker();
 });
 
-// NO fetch handler — let the browser handle all requests normally
+// ==== Push Notification Handler ====
+self.addEventListener('push', (event) => {
+    let data = { title: 'AWorded', body: '' };
+    try {
+        data = event.data.json();
+    } catch {
+        data.body = event.data ? event.data.text() : '';
+    }
 
+    event.waitUntil(
+        self.registration.showNotification(data.title || 'AWorded', {
+            body: data.body || '',
+            icon: './icons/logo.svg',
+            badge: './icons/logo.svg',
+            tag: data.tag || 'aworded-push',
+            renotify: true,
+            data: data
+        })
+    );
+});
+
+// ==== Message Handler (for direct notifications from page) ====
 self.addEventListener('message', (event) => {
     const data = event.data;
 
-    if (data.type === 'UPDATE_SCHEDULES') {
-        schedules = data.schedules || [];
-        startScheduleChecker();
-    }
-
     if (data.type === 'SHOW_NOTIFICATION') {
-        self.registration.showNotification(data.title, {
-            body: data.body,
+        self.registration.showNotification(data.title || 'AWorded', {
+            body: data.body || '',
             icon: data.icon || './icons/logo.svg',
             badge: './icons/logo.svg',
             tag: 'aworded-reminder',
@@ -40,11 +49,11 @@ self.addEventListener('message', (event) => {
     }
 });
 
-// When user clicks notification, open the app
+// ==== Notification Click Handler ====
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     event.waitUntil(
-        self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(clients => {
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
             if (clients.length > 0) {
                 return clients[0].focus();
             }
@@ -52,39 +61,3 @@ self.addEventListener('notificationclick', (event) => {
         })
     );
 });
-
-function startScheduleChecker() {
-    if (checkInterval) clearInterval(checkInterval);
-    if (schedules.length > 0) {
-        checkInterval = setInterval(checkSchedules, 30000);
-    }
-}
-
-function checkSchedules() {
-    const now = new Date();
-    const currentDay = now.getDay();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    schedules.forEach((notif, index) => {
-        if (!notif.enabled) return;
-        if (notif.time !== currentTime) return;
-        if (!notif.days.includes(currentDay)) return;
-
-        const fireKey = `${index}-${currentTime}-${currentDay}-${now.toDateString()}`;
-        if (fireKey === lastFiredKey) return;
-        lastFiredKey = fireKey;
-
-        const dictName = notif.dictionaryName || '';
-        const body = notif.tags && notif.tags.length
-            ? `${notif.message}\n${dictName} | ${notif.tags.join(', ')}`
-            : `${notif.message}\n${dictName}`;
-
-        self.registration.showNotification('AWorded', {
-            body: body,
-            icon: './icons/logo.svg',
-            badge: './icons/logo.svg',
-            tag: 'aworded-reminder-' + index,
-            renotify: true
-        });
-    });
-}

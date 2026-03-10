@@ -1,22 +1,82 @@
-// ==== notifications.js — Supabase-synced notifications ====
+// ==== notifications.js — Web Push + Supabase-synced notifications ====
+
+const VAPID_PUBLIC_KEY = 'BI6GbgN9_udyAyaXIumgu8X8u3BRwdvuest29gyLcvwKDBqhzk6Bp9OYOjMLeJtFU94Tx8khU-lI19M7APVvMFc';
 
 let notificationSchedules = [];
 let notifCheckInterval = null;
 let lastFiredKey = '';
 let editingNotifIndex = -1;
 
-// Detect if running inside an iframe
+// ==== Helpers ====
+
 function isInIframe() {
     try { return window.self !== window.top; } catch { return true; }
 }
 
-// Listen for permission responses from parent
-if (isInIframe()) {
-    window.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'NOTIFICATION_PERMISSION') {
-            window._parentNotifPermission = event.data.permission;
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// ==== Web Push Subscription ====
+
+async function subscribeToPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.warn('[Push] Not supported');
+        return false;
+    }
+
+    try {
+        const reg = await navigator.serviceWorker.ready;
+
+        // Check existing subscription
+        let subscription = await reg.pushManager.getSubscription();
+
+        if (!subscription) {
+            // Request permission
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.warn('[Push] Permission denied');
+                return false;
+            }
+
+            // Subscribe
+            subscription = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
         }
-    });
+
+        // Save subscription to Supabase
+        const key = subscription.toJSON();
+        if (typeof supabaseClient !== 'undefined' && typeof currentUser !== 'undefined' && currentUser) {
+            const { error } = await supabaseClient
+                .from('push_subscriptions')
+                .upsert({
+                    user_id: currentUser.id,
+                    endpoint: key.endpoint,
+                    p256dh: key.keys.p256dh,
+                    auth: key.keys.auth
+                }, { onConflict: 'user_id,endpoint' });
+
+            if (error) {
+                console.error('[Push] Save subscription error:', error.message);
+            } else {
+                console.log('[Push] Subscription saved to Supabase');
+            }
+        }
+
+        return true;
+    } catch (err) {
+        console.error('[Push] Subscribe failed:', err);
+        return false;
+    }
 }
 
 // ==== Supabase CRUD for notification schedules ====
@@ -66,7 +126,6 @@ async function saveNotification(notifData) {
     };
 
     if (notifData.id) {
-        // Update existing
         const { data, error } = await supabaseClient
             .from('notification_schedules')
             .update(row)
@@ -79,7 +138,6 @@ async function saveNotification(notifData) {
         }
         return data;
     } else {
-        // Insert new
         const { data, error } = await supabaseClient
             .from('notification_schedules')
             .insert(row)
@@ -98,9 +156,7 @@ async function deleteNotificationFromDB(id) {
         .from('notification_schedules')
         .delete()
         .eq('id', id);
-    if (error) {
-        showToast('შეცდომა: ' + error.message, 'error');
-    }
+    if (error) showToast('შეცდომა: ' + error.message, 'error');
 }
 
 async function toggleNotificationInDB(id, enabled) {
@@ -178,14 +234,12 @@ async function deleteNotification(index) {
     if (notif.id) await deleteNotificationFromDB(notif.id);
     notificationSchedules.splice(index, 1);
     renderNotificationList();
-    updateServiceWorkerSchedules();
 }
 
 async function toggleNotification(index, enabled) {
     notificationSchedules[index].enabled = enabled;
     const notif = notificationSchedules[index];
     if (notif.id) await toggleNotificationInDB(notif.id, enabled);
-    updateServiceWorkerSchedules();
 }
 
 function editNotification(index) {
@@ -267,7 +321,6 @@ async function initNotificationUI() {
 
     if (!notifBtn || !modal) return;
 
-    // Load from Supabase
     await loadNotificationSchedules();
 
     notifBtn.onclick = () => {
@@ -295,13 +348,11 @@ async function initNotificationUI() {
         editingNotifIndex = -1;
     };
 
-    // Weekday toggle buttons
     document.getElementById('notifWeekdays').addEventListener('click', (e) => {
         const btn = e.target.closest('.weekday-btn');
         if (btn) btn.classList.toggle('active');
     });
 
-    // Save notification
     saveBtn.onclick = async () => {
         const time = document.getElementById('notifTimeInput').value;
         if (!time) {
@@ -337,10 +388,8 @@ async function initNotificationUI() {
         const saved = await saveNotification(notifData);
         if (!saved) return;
 
-        // Reload from DB to stay in sync
         await loadNotificationSchedules();
         renderNotificationList();
-        updateServiceWorkerSchedules();
 
         form.style.display = 'none';
         addBtn.style.display = '';
@@ -354,192 +403,57 @@ async function initNotificationUI() {
     if (testBtn) {
         testBtn.onclick = async () => {
             const debugEl = document.getElementById('notifDebugInfo');
-            const inIframe = isInIframe();
-            const swController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
-            const notifSupported = 'Notification' in window;
-            const notifPermission = notifSupported ? Notification.permission : 'N/A';
+            const pushSupported = 'PushManager' in window;
+            const swReady = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+            const notifPermission = 'Notification' in window ? Notification.permission : 'N/A';
 
-            let info = `iframe: ${inIframe} | SW: ${swController} | Notif API: ${notifSupported} | Permission: ${notifPermission}`;
-            if (debugEl) debugEl.textContent = info;
-            console.log('[Notif Test]', info);
+            let info = `Push: ${pushSupported} | SW: ${swReady} | Permission: ${notifPermission}`;
 
-            // Request permission if needed (only when NOT in iframe)
-            if (!inIframe && notifSupported && notifPermission === 'default') {
+            // Subscribe to push if not yet
+            if (notifPermission !== 'granted') {
                 const result = await Notification.requestPermission();
-                info += ` | Requested: ${result}`;
-                if (debugEl) debugEl.textContent = info;
+                info += ` | Asked: ${result}`;
                 if (result !== 'granted') {
-                    showToast('ნოტიფიკაციის ნებართვა არ მოგეცათ', 'error');
+                    if (debugEl) debugEl.textContent = info;
+                    showToast('ნოტიფიკაციის ნებართვა უარყოფილია. ბრაუზერის პარამეტრებში ჩართეთ.', 'error');
                     return;
                 }
             }
-            // In iframe, request permission from parent
-            if (inIframe) {
-                window.parent.postMessage({ type: 'REQUEST_NOTIFICATION_PERMISSION' }, '*');
+
+            // Subscribe to push
+            const subscribed = await subscribeToPush();
+            info += ` | Subscribed: ${subscribed}`;
+            if (debugEl) debugEl.textContent = info;
+
+            // Send test via SW
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'SHOW_NOTIFICATION',
+                    title: 'AWorded Test',
+                    body: 'ტესტ ნოტიფიკაცია მუშაობს!'
+                });
+                showToast('ტესტ ნოტიფიკაცია გაიგზავნა!', 'success');
+            } else {
+                // Fallback
+                new Notification('AWorded Test', {
+                    body: 'ტესტ ნოტიფიკაცია მუშაობს!',
+                    icon: './icons/logo.svg'
+                });
+                showToast('ტესტ ნოტიფიკაცია გაიგზავნა!', 'success');
             }
-
-            // Try to show a test notification
-            await showNotificationWithCard({
-                dictionaryId: typeof currentDictionaryId !== 'undefined' ? currentDictionaryId : null,
-                tags: [],
-                progressRange: ''
-            });
-            showToast('ტესტ ნოტიფიკაცია გაიგზავნა!', 'success');
         };
     }
 
-    // Request notification permission
-    requestNotificationPermission();
-
-    // Start checking schedule
-    startNotificationChecker();
-    updateServiceWorkerSchedules();
+    // Subscribe to push notifications
+    await subscribeToPush();
 }
 
-// ==== Permission ====
-
-async function requestNotificationPermission() {
-    if (isInIframe()) {
-        // Ask parent page to request permission and report back
-        window.parent.postMessage({ type: 'REQUEST_NOTIFICATION_PERMISSION' }, '*');
-        // Also ask parent for current permission status
-        window.parent.postMessage({ type: 'GET_NOTIFICATION_PERMISSION' }, '*');
-        return;
-    }
-    if (!('Notification' in window)) return;
-    if (Notification.permission === 'default') {
-        await Notification.requestPermission();
-    }
-}
-
-function hasNotificationPermission() {
-    if (isInIframe()) {
-        // In iframe, assume permission is handled by parent — always try to send
-        return true;
-    }
-    return 'Notification' in window && Notification.permission === 'granted';
-}
-
-// ==== Notification Checker ====
-
-function startNotificationChecker() {
-    if (notifCheckInterval) clearInterval(notifCheckInterval);
-    notifCheckInterval = setInterval(checkNotificationSchedule, 30000);
-}
-
-async function checkNotificationSchedule() {
-    if (!hasNotificationPermission()) return;
-
-    const now = new Date();
-    const currentDay = now.getDay();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    for (let index = 0; index < notificationSchedules.length; index++) {
-        const notif = notificationSchedules[index];
-        if (!notif.enabled) continue;
-        if (notif.time !== currentTime) continue;
-        if (!notif.days.includes(currentDay)) continue;
-
-        const fireKey = `${notif.id || index}-${currentTime}-${currentDay}-${now.toDateString()}`;
-        if (fireKey === lastFiredKey) continue;
-        lastFiredKey = fireKey;
-
-        await showNotificationWithCard(notif);
-    }
-}
-
-// ==== Card Fetching & Display ====
-
-async function fetchRandomCard(dictionaryId, tagNames, progressRange) {
-    if (typeof supabaseClient === 'undefined' || typeof currentUser === 'undefined' || !currentUser) return null;
-
-    try {
-        let progressMin = null;
-        let progressMax = null;
-        if (progressRange) {
-            const parts = progressRange.split('-');
-            progressMin = parseInt(parts[0]);
-            progressMax = parseInt(parts[1]);
-        }
-
-        const params = {
-            dict_id_input: dictionaryId || null,
-            tag_names_input: tagNames && tagNames.length > 0 ? tagNames : null,
-            progress_min_input: progressMin,
-            progress_max_input: progressMax
-        };
-        const { data, error } = await supabaseClient.rpc('get_random_card', params).single();
-        if (error || !data) return null;
-        return data;
-    } catch {
-        return null;
-    }
-}
-
-async function showNotificationWithCard(notif) {
-    const dictName = getDictionaryNameById(notif.dictionaryId);
-    const card = await fetchRandomCard(notif.dictionaryId, notif.tags, notif.progressRange);
-
-    let title = 'AWorded';
-    let body;
-
-    if (card) {
-        title = card.word || 'AWorded';
-        body = (card.main_translations || []).join(', ');
-    } else {
-        body = dictName;
-    }
-
-    if (isInIframe()) {
-        window.parent.postMessage({
-            type: 'SHOW_NOTIFICATION',
-            title,
-            body,
-            icon: 'https://zurabkostava.github.io/aworded/icons/logo.svg'
-        }, '*');
-        return;
-    }
-
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-            type: 'SHOW_NOTIFICATION',
-            title,
-            body,
-            icon: './icons/logo.svg'
-        });
-    } else {
-        new Notification(title, {
-            body,
-            icon: './icons/logo.svg',
-            tag: 'aworded-reminder'
-        });
-    }
-}
-
-// ==== Service Worker Communication ====
-
-function updateServiceWorkerSchedules() {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-            type: 'UPDATE_SCHEDULES',
-            schedules: notificationSchedules
-        });
-    }
-}
+// ==== Service Worker Registration ====
 
 async function registerNotificationSW() {
     if (!('serviceWorker' in navigator)) return;
     try {
-        const reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
-        if (reg.active) {
-            reg.active.postMessage({
-                type: 'UPDATE_SCHEDULES',
-                schedules: notificationSchedules
-            });
-        }
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            updateServiceWorkerSchedules();
-        });
+        await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
     } catch (err) {
         console.warn('Service worker registration failed:', err);
     }
