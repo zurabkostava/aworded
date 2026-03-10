@@ -16,10 +16,9 @@
         if (localStorage.getItem('theme') === 'dark') {
             document.documentElement.classList.add('dark');
         }
-        // Register SW immediately for network-first caching
+        // Register SW for notifications only
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
-                .then(reg => reg.update())
                 .catch(() => {});
         }
     </script>
@@ -667,27 +666,5 @@
     <h2 class="mobile-tittle">AWorded</h2>
     <div class="toast-container" id="toastContainer"></div>
 </div>
-<script>
-// Watchdog: if logged in but no cards after 8s, force a clean reload
-setTimeout(() => {
-    const app = document.getElementById('mainAppContainer');
-    const auth = document.getElementById('authContainer');
-    const isLoggedIn = app && app.style.display !== 'none' && auth && auth.style.display === 'none';
-    const hasCards = document.querySelectorAll('.card').length > 0;
-    if (isLoggedIn && !hasCards && !sessionStorage.getItem('_reloaded')) {
-        console.warn('[AWorded] Watchdog: logged in but 0 cards, forcing reload...');
-        sessionStorage.setItem('_reloaded', '1');
-        location.reload();
-    }
-}, 8000);
-// Clear reload flag on successful load
-window.addEventListener('load', () => {
-    setTimeout(() => {
-        if (document.querySelectorAll('.card').length > 0) {
-            sessionStorage.removeItem('_reloaded');
-        }
-    }, 10000);
-});
-</script>
 </body>
 </html>

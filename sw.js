@@ -1,6 +1,5 @@
-// ==== sw.js - AWorded Service Worker ====
-const SW_VERSION = 5;
-const CACHE_NAME = 'aworded-v5';
+// ==== sw.js - AWorded Service Worker (notifications only) ====
+const SW_VERSION = 6;
 
 let schedules = [];
 let checkInterval = null;
@@ -11,7 +10,7 @@ self.addEventListener('install', () => {
 });
 
 self.addEventListener('activate', (event) => {
-    // Clear all old caches on activation
+    // Clear all old caches and claim clients
     event.waitUntil(
         caches.keys().then(keys =>
             Promise.all(keys.map(key => caches.delete(key)))
@@ -20,30 +19,7 @@ self.addEventListener('activate', (event) => {
     startScheduleChecker();
 });
 
-// Network-first strategy: always fetch fresh, cache as fallback for offline
-self.addEventListener('fetch', (event) => {
-    const url = new URL(event.request.url);
-
-    // Only handle same-origin requests (our app files)
-    if (url.origin !== self.location.origin) return;
-
-    // Skip non-GET requests
-    if (event.request.method !== 'GET') return;
-
-    event.respondWith(
-        fetch(event.request, { cache: 'no-cache' }).then(response => {
-            // Cache the fresh response for offline fallback
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => {
-                cache.put(event.request, clone);
-            });
-            return response;
-        }).catch(() => {
-            // Network failed, try cache
-            return caches.match(event.request);
-        })
-    );
-});
+// NO fetch handler — let the browser handle all requests normally
 
 self.addEventListener('message', (event) => {
     const data = event.data;
@@ -56,8 +32,8 @@ self.addEventListener('message', (event) => {
     if (data.type === 'SHOW_NOTIFICATION') {
         self.registration.showNotification(data.title, {
             body: data.body,
-            icon: data.icon || '/icons/logo.svg',
-            badge: '/icons/logo.svg',
+            icon: data.icon || './icons/logo.svg',
+            badge: './icons/logo.svg',
             tag: 'aworded-reminder',
             renotify: true
         });
@@ -72,7 +48,7 @@ self.addEventListener('notificationclick', (event) => {
             if (clients.length > 0) {
                 return clients[0].focus();
             }
-            return self.clients.openWindow('/');
+            return self.clients.openWindow('./');
         })
     );
 });
@@ -105,8 +81,8 @@ function checkSchedules() {
 
         self.registration.showNotification('AWorded', {
             body: body,
-            icon: '/icons/logo.svg',
-            badge: '/icons/logo.svg',
+            icon: './icons/logo.svg',
+            badge: './icons/logo.svg',
             tag: 'aworded-reminder-' + index,
             renotify: true
         });
