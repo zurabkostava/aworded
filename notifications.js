@@ -1,10 +1,9 @@
-// ==== notifications.js ====
+// ==== notifications.js — Supabase-synced notifications ====
 
-const NOTIF_STORAGE_KEY = 'aworded_notifications';
 let notificationSchedules = [];
 let notifCheckInterval = null;
-let lastFiredKey = ''; // prevents double-firing within same minute
-let editingNotifIndex = -1; // -1 = adding new, >= 0 = editing existing
+let lastFiredKey = '';
+let editingNotifIndex = -1;
 
 // Detect if running inside an iframe
 function isInIframe() {
@@ -20,24 +19,105 @@ if (isInIframe()) {
     });
 }
 
-function loadNotificationSchedules() {
+// ==== Supabase CRUD for notification schedules ====
+
+async function loadNotificationSchedules() {
+    if (typeof supabaseClient === 'undefined' || typeof currentUser === 'undefined' || !currentUser) {
+        notificationSchedules = [];
+        return;
+    }
     try {
-        notificationSchedules = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY)) || [];
-    } catch {
+        const { data, error } = await supabaseClient
+            .from('notification_schedules')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .order('created_at');
+        if (error) {
+            console.error('[Notif] Load error:', error.message);
+            notificationSchedules = [];
+            return;
+        }
+        notificationSchedules = (data || []).map(row => ({
+            id: row.id,
+            time: row.time,
+            days: row.days || [],
+            dictionaryId: row.dictionary_id,
+            tags: row.tags || [],
+            progressRange: row.progress_range || '',
+            enabled: row.enabled !== false,
+            createdAt: row.created_at
+        }));
+    } catch (e) {
+        console.error('[Notif] Load exception:', e);
         notificationSchedules = [];
     }
 }
 
-function saveNotificationSchedules() {
-    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notificationSchedules));
+async function saveNotification(notifData) {
+    if (!currentUser) return null;
+    const row = {
+        user_id: currentUser.id,
+        time: notifData.time,
+        days: notifData.days,
+        dictionary_id: notifData.dictionaryId || null,
+        tags: notifData.tags || [],
+        progress_range: notifData.progressRange || '',
+        enabled: notifData.enabled !== false
+    };
+
+    if (notifData.id) {
+        // Update existing
+        const { data, error } = await supabaseClient
+            .from('notification_schedules')
+            .update(row)
+            .eq('id', notifData.id)
+            .select()
+            .single();
+        if (error) {
+            showToast('შეცდომა: ' + error.message, 'error');
+            return null;
+        }
+        return data;
+    } else {
+        // Insert new
+        const { data, error } = await supabaseClient
+            .from('notification_schedules')
+            .insert(row)
+            .select()
+            .single();
+        if (error) {
+            showToast('შეცდომა: ' + error.message, 'error');
+            return null;
+        }
+        return data;
+    }
 }
+
+async function deleteNotificationFromDB(id) {
+    const { error } = await supabaseClient
+        .from('notification_schedules')
+        .delete()
+        .eq('id', id);
+    if (error) {
+        showToast('შეცდომა: ' + error.message, 'error');
+    }
+}
+
+async function toggleNotificationInDB(id, enabled) {
+    await supabaseClient
+        .from('notification_schedules')
+        .update({ enabled })
+        .eq('id', id);
+}
+
+// ==== UI Rendering ====
 
 function renderNotificationList() {
     const container = document.getElementById('notificationListContainer');
     if (!container) return;
 
     if (notificationSchedules.length === 0) {
-        container.innerHTML = '<p class="notif-empty" style="text-align: center; color: #888;">შეხსენებები არ გაქვთ.</p>';
+        container.innerHTML = '<p style="text-align: center; color: #888;">შეხსენებები არ გაქვთ.</p>';
         return;
     }
 
@@ -47,7 +127,7 @@ function renderNotificationList() {
         const days = (notif.days || []).map(d => dayNames[d]).join(', ');
         const dictName = getDictionaryNameById(notif.dictionaryId);
         const tagNames = (notif.tags || []).join(', ');
-        const progressLabel = !notif.progressRange ? 'გლობალური' : notif.progressRange === '100-100' ? 'ნასწავლი' : notif.progressRange === '0-99' ? '100%-ის გარეშე' : `${notif.progressRange}%`;
+        const progressLabel = getProgressLabel(notif.progressRange);
 
         return `
             <div class="notif-item" data-index="${index}">
@@ -55,7 +135,7 @@ function renderNotificationList() {
                     <span class="notif-time">${notif.time}</span>
                     <span class="notif-days">${days}</span>
                     <label class="notif-toggle">
-                        <input type="checkbox" ${notif.enabled !== false ? 'checked' : ''} onchange="toggleNotification(${index}, this.checked)">
+                        <input type="checkbox" ${notif.enabled ? 'checked' : ''} onchange="toggleNotification(${index}, this.checked)">
                         <span class="notif-toggle-slider"></span>
                     </label>
                     <button class="notif-edit-btn" onclick="editNotification(${index})" title="რედაქტირება">
@@ -68,11 +148,18 @@ function renderNotificationList() {
                 <div class="notif-item-details">
                     <span class="notif-dict"><i class="fas fa-book"></i> ${dictName}</span>
                     ${tagNames ? `<span class="notif-tags"><i class="fas fa-tags"></i> ${tagNames}</span>` : ''}
-                    ${progressLabel ? `<span class="notif-progress"><i class="fas fa-chart-line"></i> ${progressLabel}</span>` : ''}
+                    <span class="notif-progress"><i class="fas fa-chart-line"></i> ${progressLabel}</span>
                 </div>
             </div>
         `;
     }).join('');
+}
+
+function getProgressLabel(progressRange) {
+    if (!progressRange) return 'გლობალური';
+    if (progressRange === '100-100') return 'ნასწავლი';
+    if (progressRange === '0-99') return '100%-ის გარეშე';
+    return progressRange + '%';
 }
 
 function getDictionaryNameById(id) {
@@ -83,19 +170,30 @@ function getDictionaryNameById(id) {
     return 'ყველა';
 }
 
-function deleteNotification(index) {
+// ==== CRUD Actions ====
+
+async function deleteNotification(index) {
     if (!confirm('ნამდვილად წაშალოთ შეხსენება?')) return;
+    const notif = notificationSchedules[index];
+    if (notif.id) await deleteNotificationFromDB(notif.id);
     notificationSchedules.splice(index, 1);
-    saveNotificationSchedules();
     renderNotificationList();
     updateServiceWorkerSchedules();
 }
 
-function toggleNotification(index, enabled) {
+async function toggleNotification(index, enabled) {
     notificationSchedules[index].enabled = enabled;
-    saveNotificationSchedules();
+    const notif = notificationSchedules[index];
+    if (notif.id) await toggleNotificationInDB(notif.id, enabled);
     updateServiceWorkerSchedules();
 }
+
+function editNotification(index) {
+    editingNotifIndex = index;
+    openNotifForm(notificationSchedules[index]);
+}
+
+// ==== Form UI ====
 
 function populateNotifDictDropdown(selectedId) {
     const select = document.getElementById('notifDictSelect');
@@ -137,19 +235,16 @@ function openNotifForm(notif) {
     const progressSelect = document.getElementById('notifProgressSelect');
 
     if (notif) {
-        // Editing existing
         formTitle.textContent = 'შეხსენების რედაქტირება';
         document.getElementById('notifTimeInput').value = notif.time || '12:00';
         populateNotifDictDropdown(notif.dictionaryId);
         populateNotifTagDropdown(notif.tags);
         if (progressSelect) progressSelect.value = notif.progressRange || '';
-        // Set weekday buttons
         document.querySelectorAll('.weekday-btn').forEach(btn => {
             const day = parseInt(btn.dataset.day);
             btn.classList.toggle('active', (notif.days || []).includes(day));
         });
     } else {
-        // Adding new
         formTitle.textContent = 'ახალი შეხსენება';
         document.getElementById('notifTimeInput').value = '12:00';
         populateNotifDictDropdown();
@@ -159,12 +254,9 @@ function openNotifForm(notif) {
     }
 }
 
-function editNotification(index) {
-    editingNotifIndex = index;
-    openNotifForm(notificationSchedules[index]);
-}
+// ==== Init ====
 
-function initNotificationUI() {
+async function initNotificationUI() {
     const notifBtn = document.getElementById('notificationsBtn');
     const modal = document.getElementById('notificationsModal');
     const closeBtn = document.getElementById('closeNotificationsModalBtn');
@@ -175,7 +267,8 @@ function initNotificationUI() {
 
     if (!notifBtn || !modal) return;
 
-    loadNotificationSchedules();
+    // Load from Supabase
+    await loadNotificationSchedules();
 
     notifBtn.onclick = () => {
         renderNotificationList();
@@ -208,8 +301,8 @@ function initNotificationUI() {
         if (btn) btn.classList.toggle('active');
     });
 
-    // Save notification (create or update)
-    saveBtn.onclick = () => {
+    // Save notification
+    saveBtn.onclick = async () => {
         const time = document.getElementById('notifTimeInput').value;
         if (!time) {
             showToast('აირჩიეთ დრო', 'error');
@@ -233,28 +326,27 @@ function initNotificationUI() {
             dictionaryId,
             tags: selectedTags,
             progressRange,
-            enabled: true,
-            createdAt: Date.now()
+            enabled: true
         };
 
         if (editingNotifIndex >= 0) {
-            // Preserve enabled state when editing
+            notifData.id = notificationSchedules[editingNotifIndex].id;
             notifData.enabled = notificationSchedules[editingNotifIndex].enabled;
-            notifData.createdAt = notificationSchedules[editingNotifIndex].createdAt || Date.now();
-            notificationSchedules[editingNotifIndex] = notifData;
-            showToast('შეხსენება განახლდა', 'success');
-        } else {
-            notificationSchedules.push(notifData);
-            showToast('შეხსენება დაემატა', 'success');
         }
 
-        saveNotificationSchedules();
+        const saved = await saveNotification(notifData);
+        if (!saved) return;
+
+        // Reload from DB to stay in sync
+        await loadNotificationSchedules();
         renderNotificationList();
         updateServiceWorkerSchedules();
 
         form.style.display = 'none';
         addBtn.style.display = '';
         editingNotifIndex = -1;
+
+        showToast(notifData.id ? 'შეხსენება განახლდა' : 'შეხსენება დაემატა', 'success');
     };
 
     // Request notification permission
@@ -262,11 +354,13 @@ function initNotificationUI() {
 
     // Start checking schedule
     startNotificationChecker();
+    updateServiceWorkerSchedules();
 }
+
+// ==== Permission ====
 
 async function requestNotificationPermission() {
     if (isInIframe()) {
-        // Ask parent page to request permission
         window.parent.postMessage({ type: 'REQUEST_NOTIFICATION_PERMISSION' }, '*');
         return;
     }
@@ -276,19 +370,20 @@ async function requestNotificationPermission() {
     }
 }
 
+// ==== Notification Checker ====
+
 function startNotificationChecker() {
     if (notifCheckInterval) clearInterval(notifCheckInterval);
-    notifCheckInterval = setInterval(checkNotificationSchedule, 30000); // check every 30 seconds
+    notifCheckInterval = setInterval(checkNotificationSchedule, 30000);
 }
 
 async function checkNotificationSchedule() {
-    // In iframe, check parent permission; otherwise check directly
     if (isInIframe()) {
         if (window._parentNotifPermission !== 'granted') return;
     } else if (Notification.permission !== 'granted') return;
 
     const now = new Date();
-    const currentDay = now.getDay(); // 0=Sun, 1=Mon, ...
+    const currentDay = now.getDay();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     for (let index = 0; index < notificationSchedules.length; index++) {
@@ -297,14 +392,15 @@ async function checkNotificationSchedule() {
         if (notif.time !== currentTime) continue;
         if (!notif.days.includes(currentDay)) continue;
 
-        // Prevent double-fire within same minute
-        const fireKey = `${index}-${currentTime}-${currentDay}-${now.toDateString()}`;
+        const fireKey = `${notif.id || index}-${currentTime}-${currentDay}-${now.toDateString()}`;
         if (fireKey === lastFiredKey) continue;
         lastFiredKey = fireKey;
 
         await showNotificationWithCard(notif);
     }
 }
+
+// ==== Card Fetching & Display ====
 
 async function fetchRandomCard(dictionaryId, tagNames, progressRange) {
     if (typeof supabaseClient === 'undefined' || typeof currentUser === 'undefined' || !currentUser) return null;
@@ -324,7 +420,7 @@ async function fetchRandomCard(dictionaryId, tagNames, progressRange) {
             progress_min_input: progressMin,
             progress_max_input: progressMax
         };
-        const {data, error} = await supabaseClient.rpc('get_random_card', params).single();
+        const { data, error } = await supabaseClient.rpc('get_random_card', params).single();
         if (error || !data) return null;
         return data;
     } catch {
@@ -340,42 +436,39 @@ async function showNotificationWithCard(notif) {
     let body;
 
     if (card) {
-        const word = card.word || '';
-        const translations = (card.main_translations || []).join(', ');
-        title = word;
-        body = translations;
+        title = card.word || 'AWorded';
+        body = (card.main_translations || []).join(', ');
     } else {
         body = dictName;
     }
 
-    // If in iframe, delegate notification to parent page
     if (isInIframe()) {
         window.parent.postMessage({
             type: 'SHOW_NOTIFICATION',
-            title: title,
-            body: body,
+            title,
+            body,
             icon: 'https://zurabkostava.github.io/aworded/icons/logo.svg'
         }, '*');
         return;
     }
 
-    // Try service worker notification first (persists even if tab not focused)
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
             type: 'SHOW_NOTIFICATION',
-            title: title,
-            body: body,
-            icon: '/icons/logo.svg'
+            title,
+            body,
+            icon: './icons/logo.svg'
         });
     } else {
-        // Fallback to regular Notification API
         new Notification(title, {
-            body: body,
-            icon: '/icons/logo.svg',
+            body,
+            icon: './icons/logo.svg',
             tag: 'aworded-reminder'
         });
     }
 }
+
+// ==== Service Worker Communication ====
 
 function updateServiceWorkerSchedules() {
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -386,12 +479,10 @@ function updateServiceWorkerSchedules() {
     }
 }
 
-// Register service worker
 async function registerNotificationSW() {
     if (!('serviceWorker' in navigator)) return;
     try {
         const reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
-        // Pass schedules once SW is active
         if (reg.active) {
             reg.active.postMessage({
                 type: 'UPDATE_SCHEDULES',

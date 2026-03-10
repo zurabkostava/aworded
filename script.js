@@ -1246,7 +1246,7 @@ async function deleteCard(card) {
         }
 // Notifications
         if (typeof initNotificationUI === 'function') {
-            initNotificationUI();
+            await initNotificationUI();
             registerNotificationSW();
         }
 // NEW: ჩავტვირთოთ შენახული სორტირების რეჟიმი
