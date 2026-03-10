@@ -1094,7 +1094,8 @@ async function deleteCard(card) {
         showToast("ბარათი წაიშალა", "success");
     }
 }
-document.addEventListener('DOMContentLoaded', async () => {
+// defer script — DOM is already parsed, no need for DOMContentLoaded
+(async () => {
 // ==== EARLY: Dark mode applied immediately before auth ====
     {
         const savedTheme = localStorage.getItem("theme");
@@ -2111,4 +2112,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Start the app
     await startApp();
-});
+})();
