@@ -23,24 +23,19 @@ Deno.serve(async (req) => {
 
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    // Find user by their push endpoint URL
-    const { data: sub } = await db
-      .from('push_subscriptions')
-      .select('user_id')
-      .eq('endpoint', endpoint)
-      .single()
+    console.log('endpoint received:', endpoint.substring(0, 60))
 
-    if (!sub) return new Response(JSON.stringify(DEFAULT), { headers: CORS })
-
-    // Get oldest pending notification for this user
-    const { data: notif } = await db
+    // Get notification queued specifically for this endpoint/device
+    const { data: notif, error: notifErr } = await db
       .from('push_queue')
       .select('*')
-      .eq('user_id', sub.user_id)
+      .eq('endpoint', endpoint)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: true })
       .limit(1)
       .single()
+
+    console.log('notif lookup:', notif?.title ?? 'NOT FOUND', notifErr?.message ?? '')
 
     if (!notif) return new Response(JSON.stringify(DEFAULT), { headers: CORS })
 

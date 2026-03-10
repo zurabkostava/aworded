@@ -103,9 +103,6 @@ Deno.serve(async () => {
         if (card) { title = card.word || title; body = (card.main_translations || []).join(', ') || body }
       } catch { /* use defaults */ }
 
-      // Store in queue (SW will fetch this)
-      await db.from('push_queue').insert({ user_id: s.user_id, title, body, schedule_id: s.id })
-
       // Clean up old entries
       await db.from('push_queue').delete().lt('expires_at', now.toISOString())
 
@@ -114,6 +111,12 @@ Deno.serve(async () => {
       if (!subs?.length) continue
 
       for (const sub of subs) {
+        // Store one queue entry PER DEVICE so each gets its own notification
+        const { error: qErr } = await db.from('push_queue').insert({
+          user_id: s.user_id, title, body, schedule_id: s.id, endpoint: sub.endpoint
+        })
+        if (qErr) console.error('push_queue insert failed:', qErr.message)
+
         try {
           await sendPush(sub.endpoint)
           sent++
@@ -121,7 +124,6 @@ Deno.serve(async () => {
           errors++
           const msg = err instanceof Error ? err.message : String(err)
           console.error('Push failed:', msg)
-          // Remove dead subscriptions
           if (msg.includes('410') || msg.includes('404')) {
             await db.from('push_subscriptions').delete().eq('id', sub.id)
           }
