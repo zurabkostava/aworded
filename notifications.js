@@ -4,7 +4,7 @@ const VAPID_PUBLIC_KEY = 'BI6GbgN9_udyAyaXIumgu8X8u3BRwdvuest29gyLcvwKDBqhzk6Bp9
 
 let notificationSchedules = [];
 let notifCheckInterval = null;
-let lastFiredKey = '';
+let firedKeys = new Set();
 let editingNotifIndex = -1;
 
 // ==== Helpers ====
@@ -468,13 +468,8 @@ async function initNotificationUI() {
 async function startNotificationChecker() {
     if (notifCheckInterval) clearInterval(notifCheckInterval);
 
-    // If push subscription is active, skip client-side checker — push handles it
-    try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) return;
-    } catch {}
-
+    // Always run client-side checker as fallback — push may not be delivered.
+    // Duplicate notifications are prevented by the notification tag (browser deduplicates same tag).
     notifCheckInterval = setInterval(checkNotificationSchedule, 30000);
 }
 
@@ -493,8 +488,10 @@ async function checkNotificationSchedule() {
         if (!notif.days.includes(currentDay)) continue;
 
         const fireKey = `${notif.id || index}-${currentTime}-${currentDay}-${now.toDateString()}`;
-        if (fireKey === lastFiredKey) continue;
-        lastFiredKey = fireKey;
+        if (firedKeys.has(fireKey)) continue;
+        firedKeys.add(fireKey);
+        // Clean old keys to prevent memory leak (keep only today's)
+        if (firedKeys.size > 50) firedKeys.clear();
 
         await showNotificationWithCard(notif);
     }
@@ -554,10 +551,13 @@ async function showNotificationWithCard(notif) {
 // ==== Service Worker Registration ====
 
 async function registerNotificationSW() {
-    if (!('serviceWorker' in navigator)) return;
+    if (!('serviceWorker' in navigator)) return null;
     try {
-        await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+        const reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+        console.log('[SW] Registered, scope:', reg.scope);
+        return reg;
     } catch (err) {
-        console.warn('Service worker registration failed:', err);
+        console.warn('[SW] Registration failed:', err);
+        return null;
     }
 }

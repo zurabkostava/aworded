@@ -82,6 +82,9 @@ Deno.serve(async () => {
     if (error) return Response.json({ error: error.message }, { status: 500 })
     if (!schedules?.length) return Response.json({ message: 'No notifications', time, day })
 
+    // Clean up expired queue entries once before processing
+    await db.from('push_queue').delete().lt('expires_at', now.toISOString())
+
     let sent = 0, errors = 0
 
     for (const s of schedules) {
@@ -102,9 +105,6 @@ Deno.serve(async () => {
         const { data: card } = await db.rpc('get_random_card', params).single()
         if (card) { title = card.word || title; body = (card.main_translations || []).join(', ') || body }
       } catch { /* use defaults */ }
-
-      // Clean up old entries
-      await db.from('push_queue').delete().lt('expires_at', now.toISOString())
 
       // Get user's push subscriptions
       const { data: subs, error: subsErr } = await db.from('push_subscriptions').select('*').eq('user_id', s.user_id)

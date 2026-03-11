@@ -1244,10 +1244,12 @@ async function deleteCard(card) {
                 showToast(`ლექსიკონი "${name.trim()}" შეიქმნა`, "success");
             };
         }
-// Notifications
+// Notifications — register SW first so subscribeToPush can await navigator.serviceWorker.ready
+        if (typeof registerNotificationSW === 'function') {
+            await registerNotificationSW();
+        }
         if (typeof initNotificationUI === 'function') {
             await initNotificationUI();
-            registerNotificationSW();
         }
 // NEW: ჩავტვირთოთ შენახული სორტირების რეჟიმი
         const savedSortMode = localStorage.getItem(SORT_MODE_KEY);

@@ -9,6 +9,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Content-Type': 'application/json',
 }
 
@@ -33,7 +34,7 @@ Deno.serve(async (req) => {
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: true })
       .limit(1)
-      .single()
+      .maybeSingle()
 
     console.log('notif lookup:', notif?.title ?? 'NOT FOUND', notifErr?.message ?? '')
 
