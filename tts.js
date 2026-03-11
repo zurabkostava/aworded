@@ -4,13 +4,16 @@ const VOICE_STORAGE_KEY = 'selected_voice_name';
 const GEORGIAN_VOICE_KEY = 'selected_georgian_voice';
 const ENGLISH_RATE_KEY = 'english_voice_rate';
 const GEORGIAN_RATE_KEY = 'georgian_voice_rate';
-const GOOGLE_TTS_VOICE_NAME = '🌐 Google TTS (ქართული)';
+const PIPER_VOICE_NAME = '🌐 Piper TTS — Natia (ქართული)';
+const PIPER_CDN = 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.4/dist/index.js';
+const PIPER_VOICE_ID = 'ka_GE-natia-medium';
 
 let selectedVoice = null;
 let selectedGeorgianVoice = null;
 let isSpeaking = false;
 let lastSpokenButton = null;
-let currentGoogleAudio = null;
+let currentPiperAudio = null;
+let piperModule = null;
 
 function getEnglishVoices() {
     return speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
@@ -63,14 +66,14 @@ function populateGeorgianDropdown() {
     if (!geoSelect) return;
     geoSelect.innerHTML = '';
 
-    // Always add Google TTS as first option (works in all browsers)
-    const googleOption = document.createElement('option');
-    googleOption.value = GOOGLE_TTS_VOICE_NAME;
-    googleOption.textContent = GOOGLE_TTS_VOICE_NAME;
-    if (localStorage.getItem(GEORGIAN_VOICE_KEY) === GOOGLE_TTS_VOICE_NAME) {
-        googleOption.selected = true;
+    // Always add Piper TTS as first option (works in all browsers)
+    const piperOption = document.createElement('option');
+    piperOption.value = PIPER_VOICE_NAME;
+    piperOption.textContent = PIPER_VOICE_NAME;
+    if (localStorage.getItem(GEORGIAN_VOICE_KEY) === PIPER_VOICE_NAME) {
+        piperOption.selected = true;
     }
-    geoSelect.appendChild(googleOption);
+    geoSelect.appendChild(piperOption);
 
     // Add native/multilingual voices
     getGeorgianVoices().forEach(voice => {
@@ -126,43 +129,62 @@ function loadVoicesWithDelay(retry = 0) {
 
 speechSynthesis.onvoiceschanged = loadVoices;
 
-// Google Translate TTS — works in all browsers for Georgian
-function speakWithGoogleTTS(text, rate = 1) {
-    return new Promise((resolve, reject) => {
-        if (currentGoogleAudio) {
-            currentGoogleAudio.pause();
-            currentGoogleAudio = null;
+// Piper TTS — local neural TTS in the browser via WASM
+async function loadPiper() {
+    if (piperModule) return piperModule;
+    if (typeof showToast === 'function') showToast('ხმის მოდელი იტვირთება...', 'info');
+    piperModule = await import(PIPER_CDN);
+    // Pre-download Georgian voice model
+    await piperModule.download(PIPER_VOICE_ID, (progress) => {
+        console.log('[Piper] Download:', Math.round(progress.url ? 50 : 0) + '%');
+    });
+    if (typeof showToast === 'function') showToast('Piper TTS მზადაა!', 'success');
+    return piperModule;
+}
+
+function speakWithPiper(text, rate = 1) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            if (currentPiperAudio) {
+                currentPiperAudio.pause();
+                currentPiperAudio = null;
+            }
+            const tts = await loadPiper();
+            const wav = await tts.predict({
+                text: text,
+                voiceId: PIPER_VOICE_ID,
+            });
+            const audio = new Audio();
+            audio.src = URL.createObjectURL(wav);
+            audio.playbackRate = Math.max(0.5, Math.min(rate, 2));
+            currentPiperAudio = audio;
+            audio.onended = () => { currentPiperAudio = null; resolve(); };
+            audio.onerror = () => { currentPiperAudio = null; reject(new Error('Piper playback failed')); };
+            audio.play().catch(reject);
+        } catch (e) {
+            reject(e);
         }
-        const encoded = encodeURIComponent(text);
-        const slow = rate < 0.7;
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ka&q=${encoded}&ttsspeed=${slow ? 0.24 : 1}`;
-        const audio = new Audio(url);
-        currentGoogleAudio = audio;
-        audio.playbackRate = Math.max(0.5, Math.min(rate, 2));
-        audio.onended = () => { currentGoogleAudio = null; resolve(); };
-        audio.onerror = () => { currentGoogleAudio = null; reject(new Error('Google TTS failed')); };
-        audio.play().catch(reject);
     });
 }
 
-function isGoogleTTSSelected() {
-    return localStorage.getItem(GEORGIAN_VOICE_KEY) === GOOGLE_TTS_VOICE_NAME;
+function isPiperTTSSelected() {
+    return localStorage.getItem(GEORGIAN_VOICE_KEY) === PIPER_VOICE_NAME;
 }
 
 function stopGoogleTTS() {
-    if (currentGoogleAudio) {
-        currentGoogleAudio.pause();
-        currentGoogleAudio = null;
+    if (currentPiperAudio) {
+        currentPiperAudio.pause();
+        currentPiperAudio = null;
     }
 }
 
 async function speakWithVoice(text, voiceObj, buttonEl = null, extraText = null, highlightEl = null) {
     if (!text) return;
 
-    // Check if this is a Georgian voice and Google TTS is selected
-    const useGoogleTTS = voiceObj === selectedGeorgianVoice && isGoogleTTSSelected();
+    // Check if this is a Georgian voice and Piper TTS is selected
+    const usePiperTTS = voiceObj === selectedGeorgianVoice && isPiperTTSSelected();
 
-    if (!useGoogleTTS && (!window.speechSynthesis || !voiceObj)) return;
+    if (!usePiperTTS && (!window.speechSynthesis || !voiceObj)) return;
 
     // Stop any previous speech
     stopGoogleTTS();
@@ -174,9 +196,9 @@ async function speakWithVoice(text, voiceObj, buttonEl = null, extraText = null,
             if (el) el.classList.add('highlighted-sentence');
             if (buttonEl) buttonEl.classList.add('active');
 
-            if (useGoogleTTS) {
+            if (usePiperTTS) {
                 const rate = parseFloat(localStorage.getItem(GEORGIAN_RATE_KEY) || 1);
-                speakWithGoogleTTS(txt, rate)
+                speakWithPiper(txt, rate)
                     .then(() => {
                         if (el) el.classList.remove('highlighted-sentence');
                         if (buttonEl) buttonEl.classList.remove('active');
