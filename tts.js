@@ -34,6 +34,9 @@ function loadSpeechRates() {
 }
 
 function populateVoiceDropdown() {
+    // Force a fresh getVoices() call to pick up late-loading online voices
+    speechSynthesis.getVoices();
+
     const voiceSelect = document.getElementById('voiceSelect');
     if (!voiceSelect) return;
     voiceSelect.innerHTML = '';
@@ -48,6 +51,9 @@ function populateVoiceDropdown() {
         }
         voiceSelect.appendChild(option);
     });
+
+    // Also refresh Georgian dropdown
+    populateGeorgianDropdown();
 }
 
 function populateGeorgianDropdown() {
@@ -92,11 +98,18 @@ function loadVoices() {
 
 function loadVoicesWithDelay(retry = 0) {
     const voices = speechSynthesis.getVoices();
-    if (voices.length > 0 || retry >= 10) {
+    if (voices.length > 0 || retry >= 20) {
         loadVoices();
+        // Keep retrying a few more times to catch late-loading online/multilingual voices
+        if (retry < 20) {
+            setTimeout(() => {
+                const newVoices = speechSynthesis.getVoices();
+                if (newVoices.length > voices.length) loadVoices();
+            }, 2000);
+        }
         return;
     }
-    setTimeout(() => loadVoicesWithDelay(retry + 1), 200);
+    setTimeout(() => loadVoicesWithDelay(retry + 1), 300);
 }
 
 speechSynthesis.onvoiceschanged = loadVoices;
