@@ -5,15 +5,17 @@ const GEORGIAN_VOICE_KEY = 'selected_georgian_voice';
 const ENGLISH_RATE_KEY = 'english_voice_rate';
 const GEORGIAN_RATE_KEY = 'georgian_voice_rate';
 const PIPER_VOICE_NAME = '🌐 Piper TTS — Natia (ქართული)';
-const PIPER_CDN = 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.4/dist/index.js';
-const PIPER_VOICE_ID = 'ka_GE-natia-medium';
+const PIPER_VOICE_PATH = 'ka/ka_GE/natia/medium/ka_GE-natia-medium';
 
 let selectedVoice = null;
 let selectedGeorgianVoice = null;
 let isSpeaking = false;
 let lastSpokenButton = null;
 let currentPiperAudio = null;
-let piperModule = null;
+let piperWorker = null;
+let piperReady = false;
+let piperInitializing = false;
+let piperQueue = []; // callbacks waiting for synthesis
 
 function getEnglishVoices() {
     return speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
@@ -129,31 +131,71 @@ function loadVoicesWithDelay(retry = 0) {
 
 speechSynthesis.onvoiceschanged = loadVoices;
 
-// Piper TTS — local neural TTS in the browser via WASM
-async function loadPiper() {
-    if (piperModule) return piperModule;
+// Piper TTS — local neural TTS in the browser via Web Worker + WASM
+// piperQueue holds {text, resolve, reject} — resolve receives WAV blob
+let piperPendingCallbacks = []; // callbacks waiting for output/error from worker
+
+function initPiperWorker() {
+    if (piperWorker) return;
+    if (piperInitializing) return;
+    piperInitializing = true;
+
     if (typeof showToast === 'function') showToast('ხმის მოდელი იტვირთება...', 'info');
-    piperModule = await import(PIPER_CDN);
-    // Pre-download Georgian voice model
-    await piperModule.download(PIPER_VOICE_ID, (progress) => {
-        console.log('[Piper] Download:', Math.round(progress.url ? 50 : 0) + '%');
+    console.log('[Piper] Starting worker...');
+
+    piperWorker = new Worker('piper-worker.js');
+
+    piperWorker.addEventListener('message', (e) => {
+        const { kind, wav, message } = e.data;
+
+        if (kind === 'ready') {
+            piperReady = true;
+            piperInitializing = false;
+            console.log('[Piper] Worker ready!');
+            if (typeof showToast === 'function') showToast('Piper TTS მზადაა!', 'success');
+            // Process any queued requests
+            while (piperQueue.length > 0) {
+                const queued = piperQueue.shift();
+                piperPendingCallbacks.push(queued);
+                piperWorker.postMessage({ kind: 'synthesize', text: queued.text });
+            }
+        } else if (kind === 'output') {
+            if (piperPendingCallbacks.length > 0) {
+                const cb = piperPendingCallbacks.shift();
+                cb.resolve(wav);
+            }
+        } else if (kind === 'error') {
+            console.error('[Piper] Error:', message);
+            if (piperPendingCallbacks.length > 0) {
+                const cb = piperPendingCallbacks.shift();
+                cb.reject(new Error(message));
+            }
+            if (!piperReady) {
+                // Init failed — reject all queued items too
+                piperInitializing = false;
+                while (piperQueue.length > 0) {
+                    piperQueue.shift().reject(new Error(message));
+                }
+                if (typeof showToast === 'function') showToast('Piper TTS ვერ ჩაიტვირთა', 'error');
+            }
+        } else if (kind === 'status') {
+            console.log('[Piper]', message);
+        }
     });
-    if (typeof showToast === 'function') showToast('Piper TTS მზადაა!', 'success');
-    return piperModule;
+
+    piperWorker.postMessage({ kind: 'init', voicePath: PIPER_VOICE_PATH });
 }
 
 function speakWithPiper(text, rate = 1) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            if (currentPiperAudio) {
-                currentPiperAudio.pause();
-                currentPiperAudio = null;
-            }
-            const tts = await loadPiper();
-            const wav = await tts.predict({
-                text: text,
-                voiceId: PIPER_VOICE_ID,
-            });
+    return new Promise((resolve, reject) => {
+        if (currentPiperAudio) {
+            currentPiperAudio.pause();
+            currentPiperAudio = null;
+        }
+
+        initPiperWorker();
+
+        const onWav = (wav) => {
             const audio = new Audio();
             audio.src = URL.createObjectURL(wav);
             audio.playbackRate = Math.max(0.5, Math.min(rate, 2));
@@ -161,8 +203,14 @@ function speakWithPiper(text, rate = 1) {
             audio.onended = () => { currentPiperAudio = null; resolve(); };
             audio.onerror = () => { currentPiperAudio = null; reject(new Error('Piper playback failed')); };
             audio.play().catch(reject);
-        } catch (e) {
-            reject(e);
+        };
+
+        if (piperReady) {
+            piperPendingCallbacks.push({ resolve: onWav, reject });
+            piperWorker.postMessage({ kind: 'synthesize', text });
+        } else {
+            // Worker still loading — queue this request
+            piperQueue.push({ text, resolve: onWav, reject });
         }
     });
 }
@@ -181,8 +229,8 @@ function stopGoogleTTS() {
 async function speakWithVoice(text, voiceObj, buttonEl = null, extraText = null, highlightEl = null) {
     if (!text) return;
 
-    // Check if this is a Georgian voice and Piper TTS is selected
-    const usePiperTTS = voiceObj === selectedGeorgianVoice && isPiperTTSSelected();
+    // Check if caller passed the Georgian voice slot and Piper TTS is selected
+    const usePiperTTS = isPiperTTSSelected() && voiceObj === selectedGeorgianVoice;
 
     if (!usePiperTTS && (!window.speechSynthesis || !voiceObj)) return;
 
