@@ -89,23 +89,36 @@ Deno.serve(async () => {
     const errorDetails: string[] = []
 
     for (const s of schedules) {
-      // Get random card
-      let title = 'AWorded', body = 'დროა ისწავლო!'
+      // Get random card (direct query — RPC uses auth.uid() which is null in service role)
+      let title = 'AWorded', body = ''
       try {
-        const params: Record<string, unknown> = {
-          dict_id_input: s.dictionary_id || null,
-          tag_names_input: s.tags?.length > 0 ? s.tags : null,
-          progress_min_input: null,
-          progress_max_input: null,
-        }
+        let query = db.from('cards').select('word, main_translations')
+          .eq('user_id', s.user_id)
+
+        if (s.dictionary_id) query = query.eq('dictionary_id', s.dictionary_id)
+
         if (s.progress_range) {
           const [min, max] = s.progress_range.split('-')
-          params.progress_min_input = parseInt(min)
-          params.progress_max_input = parseInt(max)
+          query = query.gte('progress', parseInt(min)).lte('progress', parseInt(max))
         }
-        const { data: card } = await db.rpc('get_random_card', params).single()
-        if (card) { title = card.word || title; body = (card.main_translations || []).join(', ') || body }
-      } catch { /* use defaults */ }
+
+        // If tags specified, get card IDs that have those tags
+        if (s.tags?.length > 0) {
+          const { data: taggedIds } = await db
+            .from('card_tags').select('card_id, tags!inner(name)')
+            .in('tags.name', s.tags)
+          if (taggedIds?.length) {
+            query = query.in('id', taggedIds.map((r: { card_id: string }) => r.card_id))
+          }
+        }
+
+        const { data: cards } = await query
+        if (cards?.length) {
+          const card = cards[Math.floor(Math.random() * cards.length)]
+          title = card.word || title
+          body = (card.main_translations || []).join(', ')
+        }
+      } catch (e) { console.error('Card fetch error:', e) }
 
       // Get user's push subscriptions
       const { data: subs, error: subsErr } = await db.from('push_subscriptions').select('*').eq('user_id', s.user_id)
