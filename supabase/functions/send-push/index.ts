@@ -82,8 +82,9 @@ Deno.serve(async () => {
     if (error) return Response.json({ error: error.message }, { status: 500 })
     if (!schedules?.length) return Response.json({ message: 'No notifications', time, day })
 
-    // Clean up expired queue entries once before processing
+    // Clean up expired queue entries and dead subscriptions
     await db.from('push_queue').delete().lt('expires_at', now.toISOString())
+    await db.from('push_subscriptions').delete().ilike('endpoint', '%permanently-removed%')
 
     let sent = 0, errors = 0
     const errorDetails: string[] = []

@@ -24,15 +24,26 @@ Deno.serve(async (req) => {
 
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    console.log('endpoint received:', endpoint.substring(0, 60))
+    console.log('endpoint received:', endpoint.substring(0, 80))
 
-    // Get notification queued specifically for this endpoint/device
+    // Find which user owns this endpoint
+    const { data: sub } = await db
+      .from('push_subscriptions')
+      .select('user_id')
+      .eq('endpoint', endpoint)
+      .maybeSingle()
+
+    console.log('subscription owner:', sub?.user_id ?? 'NOT FOUND')
+
+    if (!sub?.user_id) return new Response(JSON.stringify(DEFAULT), { headers: CORS })
+
+    // Get the most recent pending notification for this user
     const { data: notif, error: notifErr } = await db
       .from('push_queue')
       .select('*')
-      .eq('endpoint', endpoint)
+      .eq('user_id', sub.user_id)
       .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
@@ -47,7 +58,8 @@ Deno.serve(async (req) => {
       JSON.stringify({ title: notif.title, body: notif.body, schedule_id: notif.schedule_id }),
       { headers: CORS }
     )
-  } catch {
+  } catch (e) {
+    console.error('get-push-notification error:', e)
     return new Response(JSON.stringify(DEFAULT), { headers: CORS })
   }
 })
