@@ -28,13 +28,16 @@ function urlBase64ToUint8Array(base64String) {
 
 async function subscribeToPush(forceNew = false) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        console.warn('[Push] Not supported');
+        console.warn('[Push] Not supported on this browser');
         return false;
     }
 
     try {
+        console.log('[Push] Step 1: waiting for SW ready...');
         const reg = await navigator.serviceWorker.ready;
+        console.log('[Push] Step 2: SW ready, checking existing subscription...');
         let subscription = await reg.pushManager.getSubscription();
+        console.log('[Push] Step 3: existing subscription:', subscription ? 'yes' : 'no');
 
         // Unsubscribe if forced or subscription is dead
         let oldEndpoint = null;
@@ -42,31 +45,36 @@ async function subscribeToPush(forceNew = false) {
             oldEndpoint = subscription.endpoint;
             await subscription.unsubscribe();
             subscription = null;
+            console.log('[Push] Step 3b: unsubscribed old/dead subscription');
         }
 
         if (!subscription) {
+            console.log('[Push] Step 4: Notification.permission =', Notification.permission);
             if (Notification.permission !== 'granted') {
                 const permission = await Notification.requestPermission();
+                console.log('[Push] Step 4b: requestPermission result =', permission);
                 if (permission !== 'granted') {
-                    console.warn('[Push] Permission denied');
+                    console.warn('[Push] STOPPED: permission denied');
                     return false;
                 }
             }
+            console.log('[Push] Step 5: subscribing to push...');
             subscription = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
             });
+            console.log('[Push] Step 6: subscribed, endpoint:', subscription.endpoint.substring(0, 60));
         }
 
         // Save to Supabase
-        if (typeof supabaseClient !== 'undefined' && typeof currentUser !== 'undefined' && currentUser) {
+        const hasUser = typeof supabaseClient !== 'undefined' && typeof currentUser !== 'undefined' && currentUser;
+        console.log('[Push] Step 7: currentUser available:', !!hasUser);
+        if (hasUser) {
             const key = subscription.toJSON();
-            // Clean up old endpoint if it changed
             if (oldEndpoint) {
                 await supabaseClient.from('push_subscriptions').delete()
                     .eq('user_id', currentUser.id).eq('endpoint', oldEndpoint);
             }
-            // Remove existing entry for this endpoint, then insert fresh
             await supabaseClient.from('push_subscriptions').delete()
                 .eq('user_id', currentUser.id).eq('endpoint', key.endpoint);
             const { error: insertErr } = await supabaseClient.from('push_subscriptions').insert({
@@ -75,13 +83,18 @@ async function subscribeToPush(forceNew = false) {
                 p256dh: key.keys.p256dh,
                 auth: key.keys.auth
             });
-            if (insertErr) console.error('[Push] Save failed:', insertErr.message);
-            else console.log('[Push] Subscription saved');
+            if (insertErr) {
+                console.error('[Push] FAILED to save:', insertErr.message);
+            } else {
+                console.log('[Push] SUCCESS: subscription saved to DB');
+            }
+        } else {
+            console.warn('[Push] STOPPED: no currentUser, subscription not saved to DB');
         }
 
         return true;
     } catch (err) {
-        console.error('[Push] Subscribe failed:', err);
+        console.error('[Push] FAILED with error:', err.message || err);
         return false;
     }
 }
