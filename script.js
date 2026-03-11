@@ -675,6 +675,7 @@ function speakWord(text, buttonEl) {
     if (!window.speechSynthesis) return;
     if (isSpeaking) {
         speechSynthesis.cancel();
+        if (typeof stopGoogleTTS === 'function') stopGoogleTTS();
         return;
     }
     const utterance = new SpeechSynthesisUtterance(text);

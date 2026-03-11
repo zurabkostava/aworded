@@ -4,11 +4,13 @@ const VOICE_STORAGE_KEY = 'selected_voice_name';
 const GEORGIAN_VOICE_KEY = 'selected_georgian_voice';
 const ENGLISH_RATE_KEY = 'english_voice_rate';
 const GEORGIAN_RATE_KEY = 'georgian_voice_rate';
+const GOOGLE_TTS_VOICE_NAME = '🌐 Google TTS (ქართული)';
 
 let selectedVoice = null;
 let selectedGeorgianVoice = null;
 let isSpeaking = false;
 let lastSpokenButton = null;
+let currentGoogleAudio = null;
 
 function getEnglishVoices() {
     return speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
@@ -61,6 +63,16 @@ function populateGeorgianDropdown() {
     if (!geoSelect) return;
     geoSelect.innerHTML = '';
 
+    // Always add Google TTS as first option (works in all browsers)
+    const googleOption = document.createElement('option');
+    googleOption.value = GOOGLE_TTS_VOICE_NAME;
+    googleOption.textContent = GOOGLE_TTS_VOICE_NAME;
+    if (localStorage.getItem(GEORGIAN_VOICE_KEY) === GOOGLE_TTS_VOICE_NAME) {
+        googleOption.selected = true;
+    }
+    geoSelect.appendChild(googleOption);
+
+    // Add native/multilingual voices
     getGeorgianVoices().forEach(voice => {
         const option = document.createElement('option');
         option.value = voice.name;
@@ -114,15 +126,70 @@ function loadVoicesWithDelay(retry = 0) {
 
 speechSynthesis.onvoiceschanged = loadVoices;
 
-async function speakWithVoice(text, voiceObj, buttonEl = null, extraText = null, highlightEl = null) {
-    if (!window.speechSynthesis || !voiceObj || !text) return;
+// Google Translate TTS — works in all browsers for Georgian
+function speakWithGoogleTTS(text, rate = 1) {
+    return new Promise((resolve, reject) => {
+        if (currentGoogleAudio) {
+            currentGoogleAudio.pause();
+            currentGoogleAudio = null;
+        }
+        const encoded = encodeURIComponent(text);
+        const slow = rate < 0.7;
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ka&q=${encoded}&ttsspeed=${slow ? 0.24 : 1}`;
+        const audio = new Audio(url);
+        currentGoogleAudio = audio;
+        audio.playbackRate = Math.max(0.5, Math.min(rate, 2));
+        audio.onended = () => { currentGoogleAudio = null; resolve(); };
+        audio.onerror = () => { currentGoogleAudio = null; reject(new Error('Google TTS failed')); };
+        audio.play().catch(reject);
+    });
+}
 
-    // 🔁 უარყავი წინა წამკითხავი
-    speechSynthesis.cancel();
+function isGoogleTTSSelected() {
+    return localStorage.getItem(GEORGIAN_VOICE_KEY) === GOOGLE_TTS_VOICE_NAME;
+}
+
+function stopGoogleTTS() {
+    if (currentGoogleAudio) {
+        currentGoogleAudio.pause();
+        currentGoogleAudio = null;
+    }
+}
+
+async function speakWithVoice(text, voiceObj, buttonEl = null, extraText = null, highlightEl = null) {
+    if (!text) return;
+
+    // Check if this is a Georgian voice and Google TTS is selected
+    const useGoogleTTS = voiceObj === selectedGeorgianVoice && isGoogleTTSSelected();
+
+    if (!useGoogleTTS && (!window.speechSynthesis || !voiceObj)) return;
+
+    // Stop any previous speech
+    stopGoogleTTS();
+    if (window.speechSynthesis) speechSynthesis.cancel();
     await delay(100);
 
     const speak = (txt, el) => {
         return new Promise(resolve => {
+            if (el) el.classList.add('highlighted-sentence');
+            if (buttonEl) buttonEl.classList.add('active');
+
+            if (useGoogleTTS) {
+                const rate = parseFloat(localStorage.getItem(GEORGIAN_RATE_KEY) || 1);
+                speakWithGoogleTTS(txt, rate)
+                    .then(() => {
+                        if (el) el.classList.remove('highlighted-sentence');
+                        if (buttonEl) buttonEl.classList.remove('active');
+                        resolve();
+                    })
+                    .catch(() => {
+                        if (el) el.classList.remove('highlighted-sentence');
+                        if (buttonEl) buttonEl.classList.remove('active');
+                        resolve();
+                    });
+                return;
+            }
+
             const utterance = new SpeechSynthesisUtterance(txt);
             utterance.voice = voiceObj;
             utterance.lang = voiceObj.lang;
@@ -133,18 +200,11 @@ async function speakWithVoice(text, voiceObj, buttonEl = null, extraText = null,
 
             utterance.rate = rate;
 
-            // 🔦 Highlight დაწყება
-            if (el) el.classList.add('highlighted-sentence');
-
             utterance.onend = () => {
-                // 🔦 Highlight მოცილება
                 if (el) el.classList.remove('highlighted-sentence');
                 if (buttonEl) buttonEl.classList.remove('active');
                 resolve();
             };
-
-            // გააქტიურე ღილაკიც
-            if (buttonEl) buttonEl.classList.add('active');
 
             speechSynthesis.speak(utterance);
         });
@@ -154,7 +214,7 @@ async function speakWithVoice(text, voiceObj, buttonEl = null, extraText = null,
 
     if (extraText) {
         await delay(100);
-        await speak(extraText, highlightEl); // გამოიყენე იგივე highlight
+        await speak(extraText, highlightEl);
     }
 }
 
