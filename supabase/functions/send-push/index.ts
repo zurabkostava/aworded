@@ -107,7 +107,8 @@ Deno.serve(async () => {
       await db.from('push_queue').delete().lt('expires_at', now.toISOString())
 
       // Get user's push subscriptions
-      const { data: subs } = await db.from('push_subscriptions').select('*').eq('user_id', s.user_id)
+      const { data: subs, error: subsErr } = await db.from('push_subscriptions').select('*').eq('user_id', s.user_id)
+      console.log(`subs for schedule ${s.id}: ${subs?.length ?? 0}`, subsErr?.message ?? '')
       if (!subs?.length) continue
 
       for (const sub of subs) {
@@ -116,7 +117,8 @@ Deno.serve(async () => {
           user_id: s.user_id, title, body, schedule_id: s.id, endpoint: sub.endpoint,
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         })
-        if (qErr) { errors++; console.error('push_queue insert failed:', qErr.message); continue }
+        console.log(`queue insert for ${sub.endpoint.substring(0, 40)}: ${qErr ? 'FAILED: ' + qErr.message : 'OK'}`)
+        if (qErr) { errors++; continue }
 
         try {
           await sendPush(sub.endpoint)
