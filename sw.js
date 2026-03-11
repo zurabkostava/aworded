@@ -1,5 +1,5 @@
 // ==== AWorded Service Worker ====
-const SW_VERSION = 12;
+const SW_VERSION = 13;
 const PUSH_URL = 'https://wdgvxerfxwtmpqztwgtj.supabase.co/functions/v1/get-push-notification';
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -37,9 +37,11 @@ self.addEventListener('push', event => {
         return self.registration.showNotification(title, {
             body,
             tag,
-            icon: './icons/logo.svg',
-            badge: './icons/logo.svg',
+            icon: './icons/icon-192.png',
+            badge: './icons/icon-192.png',
             renotify: true,
+            vibrate: [200, 100, 200],
+            requireInteraction: true,
         });
     })());
 });
@@ -50,10 +52,12 @@ self.addEventListener('message', event => {
     if (d?.type === 'SHOW_NOTIFICATION') {
         self.registration.showNotification(d.title || 'AWorded', {
             body: d.body || '',
-            icon: d.icon || './icons/logo.svg',
-            badge: './icons/logo.svg',
+            icon: './icons/icon-192.png',
+            badge: './icons/icon-192.png',
             tag: d.tag || 'aworded-reminder',
             renotify: true,
+            vibrate: [200, 100, 200],
+            requireInteraction: true,
         });
     }
 });
