@@ -61,27 +61,22 @@ async function subscribeToPush(forceNew = false) {
         // Save to Supabase
         if (typeof supabaseClient !== 'undefined' && typeof currentUser !== 'undefined' && currentUser) {
             const key = subscription.toJSON();
-            if (forceNew) {
-                // Delete only the old endpoint for THIS device (preserve other devices)
-                if (oldEndpoint) {
-                    await supabaseClient.from('push_subscriptions').delete()
-                        .eq('user_id', currentUser.id).eq('endpoint', oldEndpoint);
-                }
-                await supabaseClient.from('push_subscriptions').insert({
-                    user_id: currentUser.id,
-                    endpoint: key.endpoint,
-                    p256dh: key.keys.p256dh,
-                    auth: key.keys.auth
-                });
-            } else {
-                await supabaseClient.from('push_subscriptions').upsert({
-                    user_id: currentUser.id,
-                    endpoint: key.endpoint,
-                    p256dh: key.keys.p256dh,
-                    auth: key.keys.auth
-                }, { onConflict: 'user_id,endpoint' });
+            // Clean up old endpoint if it changed
+            if (oldEndpoint) {
+                await supabaseClient.from('push_subscriptions').delete()
+                    .eq('user_id', currentUser.id).eq('endpoint', oldEndpoint);
             }
-            console.log('[Push] Subscription saved');
+            // Remove existing entry for this endpoint, then insert fresh
+            await supabaseClient.from('push_subscriptions').delete()
+                .eq('user_id', currentUser.id).eq('endpoint', key.endpoint);
+            const { error: insertErr } = await supabaseClient.from('push_subscriptions').insert({
+                user_id: currentUser.id,
+                endpoint: key.endpoint,
+                p256dh: key.keys.p256dh,
+                auth: key.keys.auth
+            });
+            if (insertErr) console.error('[Push] Save failed:', insertErr.message);
+            else console.log('[Push] Subscription saved');
         }
 
         return true;
