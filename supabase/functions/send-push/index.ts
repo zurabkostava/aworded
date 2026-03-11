@@ -86,6 +86,7 @@ Deno.serve(async () => {
     await db.from('push_queue').delete().lt('expires_at', now.toISOString())
 
     let sent = 0, errors = 0
+    const errorDetails: string[] = []
 
     for (const s of schedules) {
       // Get random card
@@ -109,7 +110,7 @@ Deno.serve(async () => {
       // Get user's push subscriptions
       const { data: subs, error: subsErr } = await db.from('push_subscriptions').select('*').eq('user_id', s.user_id)
       console.log(`subs for schedule ${s.id}: ${subs?.length ?? 0}`, subsErr?.message ?? '')
-      if (!subs?.length) continue
+      if (!subs?.length) { errorDetails.push(`schedule ${s.id}: no subscriptions`); continue }
 
       for (const sub of subs) {
         // Store one queue entry PER DEVICE so each gets its own notification
@@ -118,7 +119,7 @@ Deno.serve(async () => {
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         })
         console.log(`queue insert for ${sub.endpoint.substring(0, 40)}: ${qErr ? 'FAILED: ' + qErr.message : 'OK'}`)
-        if (qErr) { errors++; continue }
+        if (qErr) { errors++; errorDetails.push(`queue: ${qErr.message}`); continue }
 
         try {
           await sendPush(sub.endpoint)
@@ -126,6 +127,7 @@ Deno.serve(async () => {
         } catch (err: unknown) {
           errors++
           const msg = err instanceof Error ? err.message : String(err)
+          errorDetails.push(`push: ${msg.substring(0, 200)}`)
           console.error('Push failed:', msg)
           if (msg.includes('410') || msg.includes('404')) {
             await db.from('push_subscriptions').delete().eq('id', sub.id)
@@ -134,7 +136,7 @@ Deno.serve(async () => {
       }
     }
 
-    return Response.json({ sent, errors, time, day })
+    return Response.json({ sent, errors, time, day, errorDetails })
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 500 })
   }
