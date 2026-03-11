@@ -470,29 +470,43 @@ async function startNotificationChecker() {
 
     // Always run client-side checker as fallback — push may not be delivered.
     // Duplicate notifications are prevented by the notification tag (browser deduplicates same tag).
+    console.log(`[NotifCheck] Started. ${notificationSchedules.length} schedules loaded.`);
     notifCheckInterval = setInterval(checkNotificationSchedule, 30000);
+    // Also run immediately on start
+    checkNotificationSchedule();
 }
 
 async function checkNotificationSchedule() {
     // Check permission
-    if ('Notification' in window && Notification.permission !== 'granted') return;
+    if ('Notification' in window && Notification.permission !== 'granted') {
+        console.log('[NotifCheck] Permission not granted:', Notification.permission);
+        return;
+    }
 
     const now = new Date();
     const currentDay = now.getDay();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+    console.log(`[NotifCheck] ${currentTime} day=${currentDay} schedules=${notificationSchedules.length}`);
+
     for (let index = 0; index < notificationSchedules.length; index++) {
         const notif = notificationSchedules[index];
         if (!notif.enabled) continue;
-        if (notif.time !== currentTime) continue;
-        if (!notif.days.includes(currentDay)) continue;
+        if (notif.time !== currentTime) {
+            console.log(`[NotifCheck] Schedule "${notif.time}" ≠ current "${currentTime}"`);
+            continue;
+        }
+        if (!notif.days.includes(currentDay)) {
+            console.log(`[NotifCheck] Day ${currentDay} not in schedule days [${notif.days}]`);
+            continue;
+        }
 
         const fireKey = `${notif.id || index}-${currentTime}-${currentDay}-${now.toDateString()}`;
         if (firedKeys.has(fireKey)) continue;
         firedKeys.add(fireKey);
-        // Clean old keys to prevent memory leak (keep only today's)
         if (firedKeys.size > 50) firedKeys.clear();
 
+        console.log(`[NotifCheck] FIRING notification: ${notif.time} →`, notif);
         await showNotificationWithCard(notif);
     }
 }
